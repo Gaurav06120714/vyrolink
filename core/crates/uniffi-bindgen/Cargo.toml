@@ -1,0 +1,10 @@
+[package]
+name = "uniffi-bindgen"
+description = "Host-only tool that generates Swift/Kotlin bindings for vl-ffi (kept out of the mobile library)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+uniffi = { version = "=0.32.2", features = ["cli"] }

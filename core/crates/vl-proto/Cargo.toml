@@ -1,0 +1,13 @@
+[package]
+name = "vl-proto"
+description = "VYRO LINK wire formats: envelope header, link messages, inner messages, pairing cards, stream framing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+proptest = "1.12"

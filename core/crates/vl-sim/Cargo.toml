@@ -1,0 +1,15 @@
+[package]
+name = "vl-sim"
+description = "VYRO LINK delay-tolerant routing simulator driving the real routing engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vl-proto = { path = "../vl-proto" }
+vl-crypto = { path = "../vl-crypto" }
+vl-routing = { path = "../vl-routing" }

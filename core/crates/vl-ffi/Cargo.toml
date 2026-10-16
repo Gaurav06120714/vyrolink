@@ -1,0 +1,25 @@
+[package]
+name = "vl-ffi"
+description = "UniFFI bindings exposing the VYRO LINK node to Swift and Kotlin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+name = "vl_ffi"
+
+
+# UniFFI's generated scaffolding uses `unsafe` internally, so this crate cannot
+# inherit the workspace-wide `unsafe_code = "forbid"`. No hand-written unsafe here.
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+
+[dependencies]
+vl-core = { path = "../vl-core" }
+vl-routing = { path = "../vl-routing" }
+vl-store = { path = "../vl-store" }
+uniffi = "=0.32.2"
+qrcode = { version = "=0.14.1", default-features = false }

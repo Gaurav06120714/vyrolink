@@ -1,0 +1,16 @@
+# Third-party reference clones (GPL/AGPL; study only) and vendored agent skills
+/references/
+# Build outputs
+target/
+/core/fuzz/artifacts/
+/core/fuzz/corpus/
+*.profraw
+# OS / editor
+.DS_Store
+*.swp
+# App build outputs and generated native bindings (tools/build-core-*.sh)
+/app/build
+/app/packages/vl_host/ios/vl_host/VlFFI.xcframework/
+/app/packages/vl_host/ios/vl_host/Sources/VlCore/vl_ffi.swift
+/app/packages/vl_host/android/src/main/jniLibs/
+/app/packages/vl_host/android/src/main/kotlin/uniffi/

@@ -1,0 +1,13 @@
+# Netlify serves the static website in website/. There is no build step.
+[build]
+  publish = "website"
+  command = ""
+
+# The page loads nothing from other sites; the policy enforces that.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

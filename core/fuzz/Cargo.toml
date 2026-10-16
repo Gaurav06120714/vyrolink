@@ -1,0 +1,36 @@
+[package]
+name = "vl-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vl-proto = { path = "../crates/vl-proto" }
+vl-routing = { path = "../crates/vl-routing" }
+
+[[bin]]
+name = "decode_all"
+path = "fuzz_targets/decode_all.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "deframer"
+path = "fuzz_targets/deframer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "link_session"
+path = "fuzz_targets/link_session.rs"
+test = false
+doc = false
+bench = false

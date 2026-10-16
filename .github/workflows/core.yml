@@ -1,0 +1,49 @@
+name: core
+
+on:
+  push:
+    paths: ["core/**", "tools/**", ".github/workflows/core.yml"]
+  pull_request:
+    paths: ["core/**", "tools/**", ".github/workflows/core.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: core
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy && rustup default 1.99.0
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+      - run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - run: IPHONEOS_DEPLOYMENT_TARGET=17.0 cargo build -p vl-ffi --release --locked --target aarch64-apple-ios
+      - run: ../tools/swift-interop-test.sh
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: core/Cargo.toml
+      - run: cargo install cargo-audit --version 0.22.2 --locked && cargo audit
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core/fuzz
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install nightly --profile minimal && cargo install cargo-fuzz --version 0.13.2 --locked
+      - run: |
+          for t in decode_all deframer link_session; do
+            cargo +nightly fuzz run "$t" -- -max_total_time=60
+          done
