@@ -397,7 +397,7 @@ Free space went from 130 GiB to about 106 GiB.
 
 **Web chat:**
 - One-time: `rustup target add wasm32-unknown-unknown`, `rustup component add llvm-tools`, and `cargo install wasm-bindgen-cli --version <the wasm-bindgen version in core/Cargo.lock>`.
-- Build: `tools/build-web.sh https://vyrolink-mailbox.onrender.com --base-href /chat/`, then copy `app/build/web` to `website/chat/`. Remove `*.symbols` files and commit; Netlify deploys it.
+- Build: `VL_SCRIPTS=https://vyrolink.netlify.app/chat/ tools/build-web.sh https://vyrolink-mailbox.onrender.com --base-href /chat/`, then copy `app/build/web` to `website/chat/`. Remove `*.symbols` files and commit; Netlify deploys it.
 - If Render gives the mailbox a different address, rebuild with it.
 - Then set the mailbox's `WEB_ORIGIN` to the web chat's address.
 
