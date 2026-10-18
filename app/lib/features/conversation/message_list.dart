@@ -9,6 +9,7 @@ import '../../design/tokens.dart';
 import '../../design/widgets/delivery.dart';
 import '../../util/format.dart';
 import 'attachment_view.dart';
+import 'share_view.dart';
 
 /// What a bubble shows, for one-to-one and group messages alike.
 class BubbleData {
@@ -29,6 +30,9 @@ class BubbleData {
     this.replyTo,
     this.reactions = const [],
     this.attachment,
+    this.location,
+    this.poll,
+    this.intro,
   });
 
   factory BubbleData.fromMessage(Message m, List<Reaction> reactions) {
@@ -51,6 +55,9 @@ class BubbleData {
       replyTo: m.replyTo,
       reactions: reactions,
       attachment: a,
+      location: m.location,
+      poll: m.poll,
+      intro: m.intro,
       status: partial ? 'Message delivered · ${a.deliveredChunks} of ${a.chunkCount} file parts confirmed' : null,
     );
   }
@@ -72,6 +79,9 @@ class BubbleData {
   final Uint8List? replyTo;
   final List<Reaction> reactions;
   final AttachmentInfo? attachment;
+  final LocationInfo? location;
+  final PollInfo? poll;
+  final IntroInfo? intro;
 
   String get key => idKey(id);
 }
@@ -236,9 +246,15 @@ class Bubble extends StatelessWidget {
 
     final maxWidth = MediaQuery.sizeOf(context).width * (MediaQuery.sizeOf(context).width >= 600 ? 0.6 : 0.8);
 
+    // Cards with buttons (poll answers, Open in Maps, intro accept, attachment
+    // save) must stay reachable by screen readers; plain bubbles read as one.
+    final interactive =
+        !data.deleted && (att != null || data.location != null || data.poll != null || data.intro != null);
+
     return Semantics(
+      container: true,
       label: semantics,
-      excludeSemantics: true,
+      excludeSemantics: !interactive,
       onLongPressHint: 'Message actions',
       customSemanticsActions: {const CustomSemanticsAction(label: 'Message actions'): onLongPress},
       child: Align(
@@ -283,7 +299,13 @@ class Bubble extends StatelessWidget {
                         ),
                       if (hasQuote && !data.deleted) _Quote(quoted: quoted, onBubble: out),
                       if (att != null) AttachmentView(messageId: data.id, info: att, onBubble: out),
-                      if (body.isNotEmpty || att == null)
+                      if (data.location != null && !data.deleted)
+                        LocationCard(info: data.location!, onBubble: out, label: data.author ?? 'Shared location')
+                      else if (data.poll != null && !data.deleted)
+                        PollCard(pollId: data.id, poll: data.poll!, onBubble: out)
+                      else if (data.intro != null && !data.deleted)
+                        IntroCard(body: body, intro: data.intro!, onBubble: out)
+                      else if (body.isNotEmpty || att == null)
                         Text(
                           body,
                           style: t.bodyLarge!.copyWith(color: fg, fontStyle: data.deleted ? FontStyle.italic : null),

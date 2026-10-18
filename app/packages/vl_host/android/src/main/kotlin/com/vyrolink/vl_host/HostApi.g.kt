@@ -250,6 +250,53 @@ enum class PermissionState(val raw: Int) {
   }
 }
 
+/**
+ * A paired contact proven to be in Bluetooth range (ADR-029). The hosts keep
+ * it in memory only; it is never stored.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class NearbyContact (
+  val contactId: ByteArray,
+  /** Unix seconds of the last link that showed this contact's presence tag. */
+  val seenSecs: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NearbyContact {
+      val contactId = pigeonVar_list[0] as ByteArray
+      val seenSecs = pigeonVar_list[1] as Long
+      return NearbyContact(contactId, seenSecs)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      contactId,
+      seenSecs,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as NearbyContact
+    return HostApiPigeonUtils.deepEquals(this.contactId, other.contactId) && HostApiPigeonUtils.deepEquals(this.seenSecs, other.seenSecs)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.contactId)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.seenSecs)
+    return result
+  }
+  override fun toString(): String {
+    return "NearbyContact(contactId=${contactId.contentToString()}, seenSecs=$seenSecs)"
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class StartupInfo (
   val hasIdentity: Boolean,
@@ -304,7 +351,11 @@ data class Contact (
   val idCode: String,
   val verified: Boolean,
   val blocked: Boolean,
-  val safetyNumber: String
+  val safetyNumber: String,
+  /** Unix seconds this contact was last proven nearby over Bluetooth (ADR-033). */
+  val lastSeenSecs: Long? = null,
+  /** Who introduced this contact (ADR-037); null if met in person. */
+  val introducedBy: String? = null
 )
  {
   companion object {
@@ -316,7 +367,9 @@ data class Contact (
       val verified = pigeonVar_list[4] as Boolean
       val blocked = pigeonVar_list[5] as Boolean
       val safetyNumber = pigeonVar_list[6] as String
-      return Contact(contactId, displayName, fingerprint, idCode, verified, blocked, safetyNumber)
+      val lastSeenSecs = pigeonVar_list[7] as Long?
+      val introducedBy = pigeonVar_list[8] as String?
+      return Contact(contactId, displayName, fingerprint, idCode, verified, blocked, safetyNumber, lastSeenSecs, introducedBy)
     }
   }
   fun toList(): List<Any?> {
@@ -328,6 +381,8 @@ data class Contact (
       verified,
       blocked,
       safetyNumber,
+      lastSeenSecs,
+      introducedBy,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -338,7 +393,7 @@ data class Contact (
       return true
     }
     val other = other as Contact
-    return HostApiPigeonUtils.deepEquals(this.contactId, other.contactId) && HostApiPigeonUtils.deepEquals(this.displayName, other.displayName) && HostApiPigeonUtils.deepEquals(this.fingerprint, other.fingerprint) && HostApiPigeonUtils.deepEquals(this.idCode, other.idCode) && HostApiPigeonUtils.deepEquals(this.verified, other.verified) && HostApiPigeonUtils.deepEquals(this.blocked, other.blocked) && HostApiPigeonUtils.deepEquals(this.safetyNumber, other.safetyNumber)
+    return HostApiPigeonUtils.deepEquals(this.contactId, other.contactId) && HostApiPigeonUtils.deepEquals(this.displayName, other.displayName) && HostApiPigeonUtils.deepEquals(this.fingerprint, other.fingerprint) && HostApiPigeonUtils.deepEquals(this.idCode, other.idCode) && HostApiPigeonUtils.deepEquals(this.verified, other.verified) && HostApiPigeonUtils.deepEquals(this.blocked, other.blocked) && HostApiPigeonUtils.deepEquals(this.safetyNumber, other.safetyNumber) && HostApiPigeonUtils.deepEquals(this.lastSeenSecs, other.lastSeenSecs) && HostApiPigeonUtils.deepEquals(this.introducedBy, other.introducedBy)
   }
 
   override fun hashCode(): Int {
@@ -350,10 +405,12 @@ data class Contact (
     result = 31 * result + HostApiPigeonUtils.deepHash(this.verified)
     result = 31 * result + HostApiPigeonUtils.deepHash(this.blocked)
     result = 31 * result + HostApiPigeonUtils.deepHash(this.safetyNumber)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.lastSeenSecs)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.introducedBy)
     return result
   }
   override fun toString(): String {
-    return "Contact(contactId=${contactId.contentToString()}, displayName=$displayName, fingerprint=${fingerprint.contentToString()}, idCode=$idCode, verified=$verified, blocked=$blocked, safetyNumber=$safetyNumber)"
+    return "Contact(contactId=${contactId.contentToString()}, displayName=$displayName, fingerprint=${fingerprint.contentToString()}, idCode=$idCode, verified=$verified, blocked=$blocked, safetyNumber=$safetyNumber, lastSeenSecs=$lastSeenSecs, introducedBy=$introducedBy)"
   }
 }
 
@@ -372,7 +429,10 @@ data class Message (
   val disappearsAtSecs: Long? = null,
   val pinned: Boolean,
   val starred: Boolean,
-  val attachment: AttachmentInfo? = null
+  val attachment: AttachmentInfo? = null,
+  val location: LocationInfo? = null,
+  val poll: PollInfo? = null,
+  val intro: IntroInfo? = null
 )
  {
   companion object {
@@ -391,7 +451,10 @@ data class Message (
       val pinned = pigeonVar_list[11] as Boolean
       val starred = pigeonVar_list[12] as Boolean
       val attachment = pigeonVar_list[13] as AttachmentInfo?
-      return Message(messageId, contactId, outgoing, body, createdAtSecs, state, replyTo, forwarded, deleted, edited, disappearsAtSecs, pinned, starred, attachment)
+      val location = pigeonVar_list[14] as LocationInfo?
+      val poll = pigeonVar_list[15] as PollInfo?
+      val intro = pigeonVar_list[16] as IntroInfo?
+      return Message(messageId, contactId, outgoing, body, createdAtSecs, state, replyTo, forwarded, deleted, edited, disappearsAtSecs, pinned, starred, attachment, location, poll, intro)
     }
   }
   fun toList(): List<Any?> {
@@ -410,6 +473,9 @@ data class Message (
       pinned,
       starred,
       attachment,
+      location,
+      poll,
+      intro,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -420,7 +486,7 @@ data class Message (
       return true
     }
     val other = other as Message
-    return HostApiPigeonUtils.deepEquals(this.messageId, other.messageId) && HostApiPigeonUtils.deepEquals(this.contactId, other.contactId) && HostApiPigeonUtils.deepEquals(this.outgoing, other.outgoing) && HostApiPigeonUtils.deepEquals(this.body, other.body) && HostApiPigeonUtils.deepEquals(this.createdAtSecs, other.createdAtSecs) && HostApiPigeonUtils.deepEquals(this.state, other.state) && HostApiPigeonUtils.deepEquals(this.replyTo, other.replyTo) && HostApiPigeonUtils.deepEquals(this.forwarded, other.forwarded) && HostApiPigeonUtils.deepEquals(this.deleted, other.deleted) && HostApiPigeonUtils.deepEquals(this.edited, other.edited) && HostApiPigeonUtils.deepEquals(this.disappearsAtSecs, other.disappearsAtSecs) && HostApiPigeonUtils.deepEquals(this.pinned, other.pinned) && HostApiPigeonUtils.deepEquals(this.starred, other.starred) && HostApiPigeonUtils.deepEquals(this.attachment, other.attachment)
+    return HostApiPigeonUtils.deepEquals(this.messageId, other.messageId) && HostApiPigeonUtils.deepEquals(this.contactId, other.contactId) && HostApiPigeonUtils.deepEquals(this.outgoing, other.outgoing) && HostApiPigeonUtils.deepEquals(this.body, other.body) && HostApiPigeonUtils.deepEquals(this.createdAtSecs, other.createdAtSecs) && HostApiPigeonUtils.deepEquals(this.state, other.state) && HostApiPigeonUtils.deepEquals(this.replyTo, other.replyTo) && HostApiPigeonUtils.deepEquals(this.forwarded, other.forwarded) && HostApiPigeonUtils.deepEquals(this.deleted, other.deleted) && HostApiPigeonUtils.deepEquals(this.edited, other.edited) && HostApiPigeonUtils.deepEquals(this.disappearsAtSecs, other.disappearsAtSecs) && HostApiPigeonUtils.deepEquals(this.pinned, other.pinned) && HostApiPigeonUtils.deepEquals(this.starred, other.starred) && HostApiPigeonUtils.deepEquals(this.attachment, other.attachment) && HostApiPigeonUtils.deepEquals(this.location, other.location) && HostApiPigeonUtils.deepEquals(this.poll, other.poll) && HostApiPigeonUtils.deepEquals(this.intro, other.intro)
   }
 
   override fun hashCode(): Int {
@@ -439,10 +505,178 @@ data class Message (
     result = 31 * result + HostApiPigeonUtils.deepHash(this.pinned)
     result = 31 * result + HostApiPigeonUtils.deepHash(this.starred)
     result = 31 * result + HostApiPigeonUtils.deepHash(this.attachment)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.location)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.poll)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.intro)
     return result
   }
   override fun toString(): String {
-    return "Message(messageId=${messageId.contentToString()}, contactId=${contactId.contentToString()}, outgoing=$outgoing, body=$body, createdAtSecs=$createdAtSecs, state=$state, replyTo=${replyTo?.contentToString()}, forwarded=$forwarded, deleted=$deleted, edited=$edited, disappearsAtSecs=$disappearsAtSecs, pinned=$pinned, starred=$starred, attachment=$attachment)"
+    return "Message(messageId=${messageId.contentToString()}, contactId=${contactId.contentToString()}, outgoing=$outgoing, body=$body, createdAtSecs=$createdAtSecs, state=$state, replyTo=${replyTo?.contentToString()}, forwarded=$forwarded, deleted=$deleted, edited=$edited, disappearsAtSecs=$disappearsAtSecs, pinned=$pinned, starred=$starred, attachment=$attachment, location=$location, poll=$poll, intro=$intro)"
+  }
+}
+
+/**
+ * An introduction under its message (ADR-037). `state`: 0 asked, 1 accepted,
+ * 2 declined, 3 connected, 4 failed (the card did not match).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class IntroInfo (
+  val introId: ByteArray,
+  val otherName: String,
+  val state: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): IntroInfo {
+      val introId = pigeonVar_list[0] as ByteArray
+      val otherName = pigeonVar_list[1] as String
+      val state = pigeonVar_list[2] as Long
+      return IntroInfo(introId, otherName, state)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      introId,
+      otherName,
+      state,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as IntroInfo
+    return HostApiPigeonUtils.deepEquals(this.introId, other.introId) && HostApiPigeonUtils.deepEquals(this.otherName, other.otherName) && HostApiPigeonUtils.deepEquals(this.state, other.state)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.introId)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.otherName)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.state)
+    return result
+  }
+  override fun toString(): String {
+    return "IntroInfo(introId=${introId.contentToString()}, otherName=$otherName, state=$state)"
+  }
+}
+
+/**
+ * A shared position (ADR-034): degrees × 10⁷ (WGS 84), accuracy in metres,
+ * and when the GPS fix was taken (Unix ms).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class LocationInfo (
+  val latE7: Long,
+  val lonE7: Long,
+  val accuracyM: Long,
+  val capturedMs: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): LocationInfo {
+      val latE7 = pigeonVar_list[0] as Long
+      val lonE7 = pigeonVar_list[1] as Long
+      val accuracyM = pigeonVar_list[2] as Long
+      val capturedMs = pigeonVar_list[3] as Long
+      return LocationInfo(latE7, lonE7, accuracyM, capturedMs)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      latE7,
+      lonE7,
+      accuracyM,
+      capturedMs,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as LocationInfo
+    return HostApiPigeonUtils.deepEquals(this.latE7, other.latE7) && HostApiPigeonUtils.deepEquals(this.lonE7, other.lonE7) && HostApiPigeonUtils.deepEquals(this.accuracyM, other.accuracyM) && HostApiPigeonUtils.deepEquals(this.capturedMs, other.capturedMs)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.latE7)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.lonE7)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.accuracyM)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.capturedMs)
+    return result
+  }
+  override fun toString(): String {
+    return "LocationInfo(latE7=$latE7, lonE7=$lonE7, accuracyM=$accuracyM, capturedMs=$capturedMs)"
+  }
+}
+
+/**
+ * A poll with live counts (ADR-035). Bit i of `mine` = I chose option i.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PollInfo (
+  val question: String,
+  val options: List<String>,
+  val multi: Boolean,
+  val counts: List<Long>,
+  val mine: Long,
+  val voters: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PollInfo {
+      val question = pigeonVar_list[0] as String
+      val options = pigeonVar_list[1] as List<String>
+      val multi = pigeonVar_list[2] as Boolean
+      val counts = pigeonVar_list[3] as List<Long>
+      val mine = pigeonVar_list[4] as Long
+      val voters = pigeonVar_list[5] as Long
+      return PollInfo(question, options, multi, counts, mine, voters)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      question,
+      options,
+      multi,
+      counts,
+      mine,
+      voters,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PollInfo
+    return HostApiPigeonUtils.deepEquals(this.question, other.question) && HostApiPigeonUtils.deepEquals(this.options, other.options) && HostApiPigeonUtils.deepEquals(this.multi, other.multi) && HostApiPigeonUtils.deepEquals(this.counts, other.counts) && HostApiPigeonUtils.deepEquals(this.mine, other.mine) && HostApiPigeonUtils.deepEquals(this.voters, other.voters)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.question)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.options)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.multi)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.counts)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.mine)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.voters)
+    return result
+  }
+  override fun toString(): String {
+    return "PollInfo(question=$question, options=$options, multi=$multi, counts=$counts, mine=$mine, voters=$voters)"
   }
 }
 
@@ -794,7 +1028,8 @@ data class GroupMessage (
   val outgoing: Boolean,
   val body: String,
   val replyTo: ByteArray? = null,
-  val createdAtSecs: Long
+  val createdAtSecs: Long,
+  val poll: PollInfo? = null
 )
  {
   companion object {
@@ -805,7 +1040,8 @@ data class GroupMessage (
       val body = pigeonVar_list[3] as String
       val replyTo = pigeonVar_list[4] as ByteArray?
       val createdAtSecs = pigeonVar_list[5] as Long
-      return GroupMessage(groupMsgId, authorFingerprint, outgoing, body, replyTo, createdAtSecs)
+      val poll = pigeonVar_list[6] as PollInfo?
+      return GroupMessage(groupMsgId, authorFingerprint, outgoing, body, replyTo, createdAtSecs, poll)
     }
   }
   fun toList(): List<Any?> {
@@ -816,6 +1052,7 @@ data class GroupMessage (
       body,
       replyTo,
       createdAtSecs,
+      poll,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -826,7 +1063,7 @@ data class GroupMessage (
       return true
     }
     val other = other as GroupMessage
-    return HostApiPigeonUtils.deepEquals(this.groupMsgId, other.groupMsgId) && HostApiPigeonUtils.deepEquals(this.authorFingerprint, other.authorFingerprint) && HostApiPigeonUtils.deepEquals(this.outgoing, other.outgoing) && HostApiPigeonUtils.deepEquals(this.body, other.body) && HostApiPigeonUtils.deepEquals(this.replyTo, other.replyTo) && HostApiPigeonUtils.deepEquals(this.createdAtSecs, other.createdAtSecs)
+    return HostApiPigeonUtils.deepEquals(this.groupMsgId, other.groupMsgId) && HostApiPigeonUtils.deepEquals(this.authorFingerprint, other.authorFingerprint) && HostApiPigeonUtils.deepEquals(this.outgoing, other.outgoing) && HostApiPigeonUtils.deepEquals(this.body, other.body) && HostApiPigeonUtils.deepEquals(this.replyTo, other.replyTo) && HostApiPigeonUtils.deepEquals(this.createdAtSecs, other.createdAtSecs) && HostApiPigeonUtils.deepEquals(this.poll, other.poll)
   }
 
   override fun hashCode(): Int {
@@ -837,10 +1074,11 @@ data class GroupMessage (
     result = 31 * result + HostApiPigeonUtils.deepHash(this.body)
     result = 31 * result + HostApiPigeonUtils.deepHash(this.replyTo)
     result = 31 * result + HostApiPigeonUtils.deepHash(this.createdAtSecs)
+    result = 31 * result + HostApiPigeonUtils.deepHash(this.poll)
     return result
   }
   override fun toString(): String {
-    return "GroupMessage(groupMsgId=${groupMsgId.contentToString()}, authorFingerprint=${authorFingerprint.contentToString()}, outgoing=$outgoing, body=$body, replyTo=${replyTo?.contentToString()}, createdAtSecs=$createdAtSecs)"
+    return "GroupMessage(groupMsgId=${groupMsgId.contentToString()}, authorFingerprint=${authorFingerprint.contentToString()}, outgoing=$outgoing, body=$body, replyTo=${replyTo?.contentToString()}, createdAtSecs=$createdAtSecs, poll=$poll)"
   }
 }
 
@@ -1041,70 +1279,90 @@ private open class HostApiPigeonCodec : StandardMessageCodec() {
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          StartupInfo.fromList(it)
+          NearbyContact.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Contact.fromList(it)
+          StartupInfo.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Message.fromList(it)
+          Contact.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AttachmentInfo.fromList(it)
+          Message.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PickedFile.fromList(it)
+          IntroInfo.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ConversationSummary.fromList(it)
+          LocationInfo.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Reaction.fromList(it)
+          PollInfo.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MessageEvent.fromList(it)
+          AttachmentInfo.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          GroupMember.fromList(it)
+          PickedFile.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Group.fromList(it)
+          ConversationSummary.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          GroupMessage.fromList(it)
+          Reaction.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          GroupDelivery.fromList(it)
+          MessageEvent.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          QrCode.fromList(it)
+          GroupMember.fromList(it)
         }
       }
       145.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          Group.fromList(it)
+        }
+      }
+      146.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          GroupMessage.fromList(it)
+        }
+      }
+      147.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          GroupDelivery.fromList(it)
+        }
+      }
+      148.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          QrCode.fromList(it)
+        }
+      }
+      149.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           NetworkStatus.fromList(it)
         }
@@ -1126,60 +1384,76 @@ private open class HostApiPigeonCodec : StandardMessageCodec() {
         stream.write(131)
         writeValue(stream, value.raw.toLong())
       }
-      is StartupInfo -> {
+      is NearbyContact -> {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is Contact -> {
+      is StartupInfo -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is Message -> {
+      is Contact -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is AttachmentInfo -> {
+      is Message -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is PickedFile -> {
+      is IntroInfo -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is ConversationSummary -> {
+      is LocationInfo -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is Reaction -> {
+      is PollInfo -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is MessageEvent -> {
+      is AttachmentInfo -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is GroupMember -> {
+      is PickedFile -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is Group -> {
+      is ConversationSummary -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is GroupMessage -> {
+      is Reaction -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is GroupDelivery -> {
+      is MessageEvent -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is QrCode -> {
+      is GroupMember -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is NetworkStatus -> {
+      is Group -> {
         stream.write(145)
+        writeValue(stream, value.toList())
+      }
+      is GroupMessage -> {
+        stream.write(146)
+        writeValue(stream, value.toList())
+      }
+      is GroupDelivery -> {
+        stream.write(147)
+        writeValue(stream, value.toList())
+      }
+      is QrCode -> {
+        stream.write(148)
+        writeValue(stream, value.toList())
+      }
+      is NetworkStatus -> {
+        stream.write(149)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1197,7 +1471,20 @@ private open class HostApiPigeonCodec : StandardMessageCodec() {
  */
 interface VlHostApi {
   fun start(): StartupInfo
-  fun createIdentity()
+  /**
+   * Internet mailbox (ADR-039): sealed envelopes to upload (mine first),
+   * confirmation that the mailbox holds them, the tags to fetch, and one
+   * fetched envelope (true if it was new). The app does the HTTP itself.
+   */
+  fun internetOutbox(): List<ByteArray>
+  fun internetUploaded(envelopes: List<ByteArray>)
+  fun internetTags(): List<ByteArray>
+  fun receiveInternet(envelope: ByteArray): Boolean
+  /**
+   * Creates this phone's identity, or brings back the one this phone had
+   * before a reinstall (ADR-038). True when it was restored.
+   */
+  fun createIdentity(): Boolean
   fun myFingerprint(): ByteArray
   fun setting(key: String): String?
   fun setSetting(key: String, value: String?)
@@ -1260,12 +1547,43 @@ interface VlHostApi {
   fun groupDelivery(groupMsgId: ByteArray): GroupDelivery
   fun networkStatus(): NetworkStatus
   /**
+   * One GPS fix for "Share location" (ADR-034). Asks for location permission
+   * the first time; null if refused or no fix within about 20 s.
+   */
+  suspend fun currentLocation(): LocationInfo?
+  /** Shares a fix with a contact; returns the message id. */
+  fun sendLocation(contactId: ByteArray, fix: LocationInfo): ByteArray
+  /** Opens the system Maps app at a position (it may need the internet). */
+  fun openMap(latE7: Long, lonE7: Long, label: String)
+  /** Polls (ADR-035): start one in a chat or a group; returns its id. */
+  fun sendPoll(contactId: ByteArray, question: String, options: List<String>, multi: Boolean): ByteArray
+  fun sendGroupPoll(groupId: ByteArray, question: String, options: List<String>, multi: Boolean): ByteArray
+  /** Introductions (ADR-037). */
+  fun introduce(contactA: ByteArray, contactB: ByteArray): ByteArray
+  fun acceptIntro(introId: ByteArray, myName: String)
+  fun declineIntro(introId: ByteArray)
+  /**
+   * QR "paper" message (ADR-036): the sealed envelope of one of my
+   * undelivered messages as `VLM1:` text, and taking a scanned one (returns
+   * the contact id it came from).
+   */
+  fun paperMessage(messageId: ByteArray): String
+  fun receivePaper(code: String): ByteArray
+  /** My whole choice for a poll (bit i = option i; 0 withdraws). */
+  fun vote(pollId: ByteArray, choices: Long)
+  /** Paired, unblocked contacts seen over Bluetooth in the last `withinSecs`. */
+  fun nearbyContacts(withinSecs: Long): List<NearbyContact>
+  /**
    * Starts or stops scanning, advertising and link sessions. The choice is
    * persisted. On iOS the first start shows the system Bluetooth prompt.
    */
   fun setRelayEnabled(enabled: Boolean)
   /** Android: 1 = relay only while charging, 2 = always (foreground service). */
   fun setRelayMode(mode: Long)
+  /** Seconds before syncing with the same nearby phone again (ADR-032): 1 ..= 45, default 5. */
+  fun resyncSecs(): Long
+  /** Stores the interval (clamped to 1 ..= 45) and returns the stored value. */
+  fun setResyncSecs(secs: Long): Long
   /** Device biometrics or passcode can be used for the app lock. */
   fun canAuthenticate(): Boolean
   suspend fun authenticate(reason: String): Boolean
@@ -1282,6 +1600,8 @@ interface VlHostApi {
    */
   fun debugCreatePeer(name: String): Contact
   fun debugPeerSend(text: String)
+  /** The peer sends this file as an attachment (real chunking and encryption). */
+  fun debugPeerSendFile(name: String, data: ByteArray)
   fun debugExchange()
 
   companion object {
@@ -1310,12 +1630,76 @@ interface VlHostApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.internetOutbox$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.internetOutbox())
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.internetUploaded$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val envelopesArg = args[0] as List<ByteArray>
+            val wrapped: List<Any?> = try {
+              api.internetUploaded(envelopesArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.internetTags$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.internetTags())
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.receiveInternet$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val envelopeArg = args[0] as ByteArray
+            val wrapped: List<Any?> = try {
+              listOf(api.receiveInternet(envelopeArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.createIdentity$separatedMessageChannelSuffix", codec, taskQueue)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
-              api.createIdentity()
-              listOf(null)
+              listOf(api.createIdentity())
             } catch (exception: Throwable) {
               HostApiPigeonUtils.wrapError(exception)
             }
@@ -2211,6 +2595,226 @@ interface VlHostApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.currentLocation$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.currentLocation())
+              } catch (exception: Throwable) {
+                HostApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.sendLocation$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val contactIdArg = args[0] as ByteArray
+            val fixArg = args[1] as LocationInfo
+            val wrapped: List<Any?> = try {
+              listOf(api.sendLocation(contactIdArg, fixArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.openMap$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val latE7Arg = args[0] as Long
+            val lonE7Arg = args[1] as Long
+            val labelArg = args[2] as String
+            val wrapped: List<Any?> = try {
+              api.openMap(latE7Arg, lonE7Arg, labelArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.sendPoll$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val contactIdArg = args[0] as ByteArray
+            val questionArg = args[1] as String
+            val optionsArg = args[2] as List<String>
+            val multiArg = args[3] as Boolean
+            val wrapped: List<Any?> = try {
+              listOf(api.sendPoll(contactIdArg, questionArg, optionsArg, multiArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.sendGroupPoll$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val groupIdArg = args[0] as ByteArray
+            val questionArg = args[1] as String
+            val optionsArg = args[2] as List<String>
+            val multiArg = args[3] as Boolean
+            val wrapped: List<Any?> = try {
+              listOf(api.sendGroupPoll(groupIdArg, questionArg, optionsArg, multiArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.introduce$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val contactAArg = args[0] as ByteArray
+            val contactBArg = args[1] as ByteArray
+            val wrapped: List<Any?> = try {
+              listOf(api.introduce(contactAArg, contactBArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.acceptIntro$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val introIdArg = args[0] as ByteArray
+            val myNameArg = args[1] as String
+            val wrapped: List<Any?> = try {
+              api.acceptIntro(introIdArg, myNameArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.declineIntro$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val introIdArg = args[0] as ByteArray
+            val wrapped: List<Any?> = try {
+              api.declineIntro(introIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.paperMessage$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val messageIdArg = args[0] as ByteArray
+            val wrapped: List<Any?> = try {
+              listOf(api.paperMessage(messageIdArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.receivePaper$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val codeArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              listOf(api.receivePaper(codeArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.vote$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val pollIdArg = args[0] as ByteArray
+            val choicesArg = args[1] as Long
+            val wrapped: List<Any?> = try {
+              api.vote(pollIdArg, choicesArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.nearbyContacts$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val withinSecsArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              listOf(api.nearbyContacts(withinSecsArg))
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.setRelayEnabled$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
@@ -2237,6 +2841,38 @@ interface VlHostApi {
             val wrapped: List<Any?> = try {
               api.setRelayMode(modeArg)
               listOf(null)
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.resyncSecs$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.resyncSecs())
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.setResyncSecs$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val secsArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              listOf(api.setResyncSecs(secsArg))
             } catch (exception: Throwable) {
               HostApiPigeonUtils.wrapError(exception)
             }
@@ -2388,6 +3024,25 @@ interface VlHostApi {
             val textArg = args[0] as String
             val wrapped: List<Any?> = try {
               api.debugPeerSend(textArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              HostApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vl_host.VlHostApi.debugPeerSendFile$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val nameArg = args[0] as String
+            val dataArg = args[1] as ByteArray
+            val wrapped: List<Any?> = try {
+              api.debugPeerSendFile(nameArg, dataArg)
               listOf(null)
             } catch (exception: Throwable) {
               HostApiPigeonUtils.wrapError(exception)

@@ -271,6 +271,28 @@ End-to-end test on the emulator (the driver attaches reliably on Android):
 cd app && flutter drive --driver test_driver/integration_test.dart --target integration_test/app_flow_test.dart -d emulator-5554
 ```
 
+## 4b. Google sign-in (optional, ADR-030)
+
+The app builds and runs without this; the sign-in button then says it isn't set up. To turn it on, use Google Cloud Console (no Firebase):
+
+1. Open https://console.cloud.google.com, create a project (e.g. "VYRO LINK"), then **APIs & Services → OAuth consent screen**:
+   - choose **External**, app name, your support email;
+   - privacy policy URL `https://vyrolink.netlify.app/#privacy`;
+   - scopes `openid`, `email`, `profile`;
+   - while testing, add your own Google account under **Test users**.
+2. **Credentials → Create credentials → OAuth client ID**, three times:
+   - **Web application** (no redirect URIs needed). Copy its client ID into `googleWebClientId` in `app/lib/app/google_account.dart`. Android uses it as `serverClientId`.
+   - **Android**: package `com.vyrolink.app`, plus the **SHA-1** of each signing key. For the debug key:
+     ```bash
+     "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool" -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep SHA1
+     ```
+     (This Mac has no system Java; Android Studio's bundled `keytool` works.)
+     Add the Play App Signing key's SHA-1 later (Play Console → App integrity).
+   - **iOS**: bundle ID `com.vyrolink.app`. Copy its client ID into `googleIosClientId`. Add its **reversed client ID** (`com.googleusercontent.apps.…`) as a URL scheme in `app/ios/Runner/Info.plist` under `CFBundleURLTypes`.
+3. Rebuild both apps. Client IDs are public identifiers, so committing them is fine; never commit a *client secret* (installed apps don't use one).
+
+Before the App Store, Apple's guideline 4.8 will likely require **Sign in with Apple** next to Google sign-in. That needs a paid Apple Developer account (capability "Sign in with Apple").
+
 ## 5. Security requirements for contributors
 
 - Never log plaintext, keys, tags, ids or message bodies. Diagnostics carry counters only.
@@ -333,6 +355,12 @@ There are no measured battery or BLE figures yet; Experiment C is blocked. The r
 | `flutter drive` hangs after "Xcode build done" | The driver sometimes fails to attach on iOS 27 simulators | Stop it, `xcrun simctl shutdown <id> && xcrun simctl boot <id>`, run again. Never run two `flutter drive` commands at once |
 
 ## 9. Verification checklist (run before calling any change done)
+
+**One command runs all of it** (about 35 min, one step at a time): `tools/run-all-checks.sh [fuzz-seconds]`.
+- Steps: Rust fmt/clippy/tests, 3 fuzz targets, Swift interop, Flutter analyze/tests, the iOS simulator and Android emulator end-to-end tests, and a **release-build smoke test** on the emulator. That last one catches R8/JNA breakage, which debug builds hide.
+- Logs: `app/build/all-checks/`.
+- It does **not** cover real phones or real Bluetooth.
+
 
 - [ ] `cargo fmt --all --check` passes
 - [ ] `cargo clippy --all-targets` reports zero warnings

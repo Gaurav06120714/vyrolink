@@ -47,7 +47,7 @@ class _PanicWipeScreenState extends State<PanicWipeScreen> {
     });
     final s = context.services;
     try {
-      await s.call((api) => api.panicWipe());
+      await s.panicWipe();
       HapticFeedback.heavyImpact();
       if (!mounted) return;
       Navigator.of(context).popUntil((r) => r.isFirst);

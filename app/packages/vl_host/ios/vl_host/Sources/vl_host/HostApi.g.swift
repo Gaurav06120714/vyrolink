@@ -217,6 +217,50 @@ enum PermissionState: Int, CaseIterable {
   case restricted = 3
 }
 
+/// A paired contact proven to be in Bluetooth range (ADR-029). The hosts keep
+/// it in memory only; it is never stored.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct NearbyContact: Hashable, CustomStringConvertible {
+  var contactId: FlutterStandardTypedData
+  /// Unix seconds of the last link that showed this contact's presence tag.
+  var seenSecs: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> NearbyContact? {
+    let contactId = pigeonVar_list[0] as! FlutterStandardTypedData
+    let seenSecs = pigeonVar_list[1] as! Int64
+
+    return NearbyContact(
+      contactId: contactId,
+      seenSecs: seenSecs
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      contactId,
+      seenSecs,
+    ]
+  }
+  static func == (lhs: NearbyContact, rhs: NearbyContact) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return HostApiPigeonInternal.deepEquals(lhs.contactId, rhs.contactId) && HostApiPigeonInternal.deepEquals(lhs.seenSecs, rhs.seenSecs)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("NearbyContact")
+    HostApiPigeonInternal.deepHash(value: contactId, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: seenSecs, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "NearbyContact(contactId: \(String(describing: contactId)), seenSecs: \(String(describing: seenSecs)))"
+  }
+}
+
 /// Generated class from Pigeon that represents data sent in messages.
 struct StartupInfo: Hashable, CustomStringConvertible {
   var hasIdentity: Bool
@@ -272,6 +316,10 @@ struct Contact: Hashable, CustomStringConvertible {
   var verified: Bool
   var blocked: Bool
   var safetyNumber: String
+  /// Unix seconds this contact was last proven nearby over Bluetooth (ADR-033).
+  var lastSeenSecs: Int64? = nil
+  /// Who introduced this contact (ADR-037); null if met in person.
+  var introducedBy: String? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -283,6 +331,8 @@ struct Contact: Hashable, CustomStringConvertible {
     let verified = pigeonVar_list[4] as! Bool
     let blocked = pigeonVar_list[5] as! Bool
     let safetyNumber = pigeonVar_list[6] as! String
+    let lastSeenSecs: Int64? = nilOrValue(pigeonVar_list[7])
+    let introducedBy: String? = nilOrValue(pigeonVar_list[8])
 
     return Contact(
       contactId: contactId,
@@ -291,7 +341,9 @@ struct Contact: Hashable, CustomStringConvertible {
       idCode: idCode,
       verified: verified,
       blocked: blocked,
-      safetyNumber: safetyNumber
+      safetyNumber: safetyNumber,
+      lastSeenSecs: lastSeenSecs,
+      introducedBy: introducedBy
     )
   }
   func toList() -> [Any?] {
@@ -303,13 +355,15 @@ struct Contact: Hashable, CustomStringConvertible {
       verified,
       blocked,
       safetyNumber,
+      lastSeenSecs,
+      introducedBy,
     ]
   }
   static func == (lhs: Contact, rhs: Contact) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return HostApiPigeonInternal.deepEquals(lhs.contactId, rhs.contactId) && HostApiPigeonInternal.deepEquals(lhs.displayName, rhs.displayName) && HostApiPigeonInternal.deepEquals(lhs.fingerprint, rhs.fingerprint) && HostApiPigeonInternal.deepEquals(lhs.idCode, rhs.idCode) && HostApiPigeonInternal.deepEquals(lhs.verified, rhs.verified) && HostApiPigeonInternal.deepEquals(lhs.blocked, rhs.blocked) && HostApiPigeonInternal.deepEquals(lhs.safetyNumber, rhs.safetyNumber)
+    return HostApiPigeonInternal.deepEquals(lhs.contactId, rhs.contactId) && HostApiPigeonInternal.deepEquals(lhs.displayName, rhs.displayName) && HostApiPigeonInternal.deepEquals(lhs.fingerprint, rhs.fingerprint) && HostApiPigeonInternal.deepEquals(lhs.idCode, rhs.idCode) && HostApiPigeonInternal.deepEquals(lhs.verified, rhs.verified) && HostApiPigeonInternal.deepEquals(lhs.blocked, rhs.blocked) && HostApiPigeonInternal.deepEquals(lhs.safetyNumber, rhs.safetyNumber) && HostApiPigeonInternal.deepEquals(lhs.lastSeenSecs, rhs.lastSeenSecs) && HostApiPigeonInternal.deepEquals(lhs.introducedBy, rhs.introducedBy)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -321,10 +375,12 @@ struct Contact: Hashable, CustomStringConvertible {
     HostApiPigeonInternal.deepHash(value: verified, hasher: &hasher)
     HostApiPigeonInternal.deepHash(value: blocked, hasher: &hasher)
     HostApiPigeonInternal.deepHash(value: safetyNumber, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: lastSeenSecs, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: introducedBy, hasher: &hasher)
   }
 
   public var description: String {
-    return "Contact(contactId: \(String(describing: contactId)), displayName: \(String(describing: displayName)), fingerprint: \(String(describing: fingerprint)), idCode: \(String(describing: idCode)), verified: \(String(describing: verified)), blocked: \(String(describing: blocked)), safetyNumber: \(String(describing: safetyNumber)))"
+    return "Contact(contactId: \(String(describing: contactId)), displayName: \(String(describing: displayName)), fingerprint: \(String(describing: fingerprint)), idCode: \(String(describing: idCode)), verified: \(String(describing: verified)), blocked: \(String(describing: blocked)), safetyNumber: \(String(describing: safetyNumber)), lastSeenSecs: \(String(describing: lastSeenSecs)), introducedBy: \(String(describing: introducedBy)))"
   }
 }
 
@@ -344,6 +400,9 @@ struct Message: Hashable, CustomStringConvertible {
   var pinned: Bool
   var starred: Bool
   var attachment: AttachmentInfo? = nil
+  var location: LocationInfo? = nil
+  var poll: PollInfo? = nil
+  var intro: IntroInfo? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -362,6 +421,9 @@ struct Message: Hashable, CustomStringConvertible {
     let pinned = pigeonVar_list[11] as! Bool
     let starred = pigeonVar_list[12] as! Bool
     let attachment: AttachmentInfo? = nilOrValue(pigeonVar_list[13])
+    let location: LocationInfo? = nilOrValue(pigeonVar_list[14])
+    let poll: PollInfo? = nilOrValue(pigeonVar_list[15])
+    let intro: IntroInfo? = nilOrValue(pigeonVar_list[16])
 
     return Message(
       messageId: messageId,
@@ -377,7 +439,10 @@ struct Message: Hashable, CustomStringConvertible {
       disappearsAtSecs: disappearsAtSecs,
       pinned: pinned,
       starred: starred,
-      attachment: attachment
+      attachment: attachment,
+      location: location,
+      poll: poll,
+      intro: intro
     )
   }
   func toList() -> [Any?] {
@@ -396,13 +461,16 @@ struct Message: Hashable, CustomStringConvertible {
       pinned,
       starred,
       attachment,
+      location,
+      poll,
+      intro,
     ]
   }
   static func == (lhs: Message, rhs: Message) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return HostApiPigeonInternal.deepEquals(lhs.messageId, rhs.messageId) && HostApiPigeonInternal.deepEquals(lhs.contactId, rhs.contactId) && HostApiPigeonInternal.deepEquals(lhs.outgoing, rhs.outgoing) && HostApiPigeonInternal.deepEquals(lhs.body, rhs.body) && HostApiPigeonInternal.deepEquals(lhs.createdAtSecs, rhs.createdAtSecs) && HostApiPigeonInternal.deepEquals(lhs.state, rhs.state) && HostApiPigeonInternal.deepEquals(lhs.replyTo, rhs.replyTo) && HostApiPigeonInternal.deepEquals(lhs.forwarded, rhs.forwarded) && HostApiPigeonInternal.deepEquals(lhs.deleted, rhs.deleted) && HostApiPigeonInternal.deepEquals(lhs.edited, rhs.edited) && HostApiPigeonInternal.deepEquals(lhs.disappearsAtSecs, rhs.disappearsAtSecs) && HostApiPigeonInternal.deepEquals(lhs.pinned, rhs.pinned) && HostApiPigeonInternal.deepEquals(lhs.starred, rhs.starred) && HostApiPigeonInternal.deepEquals(lhs.attachment, rhs.attachment)
+    return HostApiPigeonInternal.deepEquals(lhs.messageId, rhs.messageId) && HostApiPigeonInternal.deepEquals(lhs.contactId, rhs.contactId) && HostApiPigeonInternal.deepEquals(lhs.outgoing, rhs.outgoing) && HostApiPigeonInternal.deepEquals(lhs.body, rhs.body) && HostApiPigeonInternal.deepEquals(lhs.createdAtSecs, rhs.createdAtSecs) && HostApiPigeonInternal.deepEquals(lhs.state, rhs.state) && HostApiPigeonInternal.deepEquals(lhs.replyTo, rhs.replyTo) && HostApiPigeonInternal.deepEquals(lhs.forwarded, rhs.forwarded) && HostApiPigeonInternal.deepEquals(lhs.deleted, rhs.deleted) && HostApiPigeonInternal.deepEquals(lhs.edited, rhs.edited) && HostApiPigeonInternal.deepEquals(lhs.disappearsAtSecs, rhs.disappearsAtSecs) && HostApiPigeonInternal.deepEquals(lhs.pinned, rhs.pinned) && HostApiPigeonInternal.deepEquals(lhs.starred, rhs.starred) && HostApiPigeonInternal.deepEquals(lhs.attachment, rhs.attachment) && HostApiPigeonInternal.deepEquals(lhs.location, rhs.location) && HostApiPigeonInternal.deepEquals(lhs.poll, rhs.poll) && HostApiPigeonInternal.deepEquals(lhs.intro, rhs.intro)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -421,10 +489,176 @@ struct Message: Hashable, CustomStringConvertible {
     HostApiPigeonInternal.deepHash(value: pinned, hasher: &hasher)
     HostApiPigeonInternal.deepHash(value: starred, hasher: &hasher)
     HostApiPigeonInternal.deepHash(value: attachment, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: location, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: poll, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: intro, hasher: &hasher)
   }
 
   public var description: String {
-    return "Message(messageId: \(String(describing: messageId)), contactId: \(String(describing: contactId)), outgoing: \(String(describing: outgoing)), body: \(String(describing: body)), createdAtSecs: \(String(describing: createdAtSecs)), state: \(String(describing: state)), replyTo: \(String(describing: replyTo)), forwarded: \(String(describing: forwarded)), deleted: \(String(describing: deleted)), edited: \(String(describing: edited)), disappearsAtSecs: \(String(describing: disappearsAtSecs)), pinned: \(String(describing: pinned)), starred: \(String(describing: starred)), attachment: \(String(describing: attachment)))"
+    return "Message(messageId: \(String(describing: messageId)), contactId: \(String(describing: contactId)), outgoing: \(String(describing: outgoing)), body: \(String(describing: body)), createdAtSecs: \(String(describing: createdAtSecs)), state: \(String(describing: state)), replyTo: \(String(describing: replyTo)), forwarded: \(String(describing: forwarded)), deleted: \(String(describing: deleted)), edited: \(String(describing: edited)), disappearsAtSecs: \(String(describing: disappearsAtSecs)), pinned: \(String(describing: pinned)), starred: \(String(describing: starred)), attachment: \(String(describing: attachment)), location: \(String(describing: location)), poll: \(String(describing: poll)), intro: \(String(describing: intro)))"
+  }
+}
+
+/// An introduction under its message (ADR-037). `state`: 0 asked, 1 accepted,
+/// 2 declined, 3 connected, 4 failed (the card did not match).
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct IntroInfo: Hashable, CustomStringConvertible {
+  var introId: FlutterStandardTypedData
+  var otherName: String
+  var state: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> IntroInfo? {
+    let introId = pigeonVar_list[0] as! FlutterStandardTypedData
+    let otherName = pigeonVar_list[1] as! String
+    let state = pigeonVar_list[2] as! Int64
+
+    return IntroInfo(
+      introId: introId,
+      otherName: otherName,
+      state: state
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      introId,
+      otherName,
+      state,
+    ]
+  }
+  static func == (lhs: IntroInfo, rhs: IntroInfo) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return HostApiPigeonInternal.deepEquals(lhs.introId, rhs.introId) && HostApiPigeonInternal.deepEquals(lhs.otherName, rhs.otherName) && HostApiPigeonInternal.deepEquals(lhs.state, rhs.state)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("IntroInfo")
+    HostApiPigeonInternal.deepHash(value: introId, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: otherName, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: state, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "IntroInfo(introId: \(String(describing: introId)), otherName: \(String(describing: otherName)), state: \(String(describing: state)))"
+  }
+}
+
+/// A shared position (ADR-034): degrees × 10⁷ (WGS 84), accuracy in metres,
+/// and when the GPS fix was taken (Unix ms).
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct LocationInfo: Hashable, CustomStringConvertible {
+  var latE7: Int64
+  var lonE7: Int64
+  var accuracyM: Int64
+  var capturedMs: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> LocationInfo? {
+    let latE7 = pigeonVar_list[0] as! Int64
+    let lonE7 = pigeonVar_list[1] as! Int64
+    let accuracyM = pigeonVar_list[2] as! Int64
+    let capturedMs = pigeonVar_list[3] as! Int64
+
+    return LocationInfo(
+      latE7: latE7,
+      lonE7: lonE7,
+      accuracyM: accuracyM,
+      capturedMs: capturedMs
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      latE7,
+      lonE7,
+      accuracyM,
+      capturedMs,
+    ]
+  }
+  static func == (lhs: LocationInfo, rhs: LocationInfo) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return HostApiPigeonInternal.deepEquals(lhs.latE7, rhs.latE7) && HostApiPigeonInternal.deepEquals(lhs.lonE7, rhs.lonE7) && HostApiPigeonInternal.deepEquals(lhs.accuracyM, rhs.accuracyM) && HostApiPigeonInternal.deepEquals(lhs.capturedMs, rhs.capturedMs)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("LocationInfo")
+    HostApiPigeonInternal.deepHash(value: latE7, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: lonE7, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: accuracyM, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: capturedMs, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "LocationInfo(latE7: \(String(describing: latE7)), lonE7: \(String(describing: lonE7)), accuracyM: \(String(describing: accuracyM)), capturedMs: \(String(describing: capturedMs)))"
+  }
+}
+
+/// A poll with live counts (ADR-035). Bit i of `mine` = I chose option i.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PollInfo: Hashable, CustomStringConvertible {
+  var question: String
+  var options: [String]
+  var multi: Bool
+  var counts: [Int64]
+  var mine: Int64
+  var voters: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PollInfo? {
+    let question = pigeonVar_list[0] as! String
+    let options = pigeonVar_list[1] as! [String]
+    let multi = pigeonVar_list[2] as! Bool
+    let counts = pigeonVar_list[3] as! [Int64]
+    let mine = pigeonVar_list[4] as! Int64
+    let voters = pigeonVar_list[5] as! Int64
+
+    return PollInfo(
+      question: question,
+      options: options,
+      multi: multi,
+      counts: counts,
+      mine: mine,
+      voters: voters
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      question,
+      options,
+      multi,
+      counts,
+      mine,
+      voters,
+    ]
+  }
+  static func == (lhs: PollInfo, rhs: PollInfo) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return HostApiPigeonInternal.deepEquals(lhs.question, rhs.question) && HostApiPigeonInternal.deepEquals(lhs.options, rhs.options) && HostApiPigeonInternal.deepEquals(lhs.multi, rhs.multi) && HostApiPigeonInternal.deepEquals(lhs.counts, rhs.counts) && HostApiPigeonInternal.deepEquals(lhs.mine, rhs.mine) && HostApiPigeonInternal.deepEquals(lhs.voters, rhs.voters)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PollInfo")
+    HostApiPigeonInternal.deepHash(value: question, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: options, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: multi, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: counts, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: mine, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: voters, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PollInfo(question: \(String(describing: question)), options: \(String(describing: options)), multi: \(String(describing: multi)), counts: \(String(describing: counts)), mine: \(String(describing: mine)), voters: \(String(describing: voters)))"
   }
 }
 
@@ -777,6 +1011,7 @@ struct GroupMessage: Hashable, CustomStringConvertible {
   var body: String
   var replyTo: FlutterStandardTypedData? = nil
   var createdAtSecs: Int64
+  var poll: PollInfo? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -787,6 +1022,7 @@ struct GroupMessage: Hashable, CustomStringConvertible {
     let body = pigeonVar_list[3] as! String
     let replyTo: FlutterStandardTypedData? = nilOrValue(pigeonVar_list[4])
     let createdAtSecs = pigeonVar_list[5] as! Int64
+    let poll: PollInfo? = nilOrValue(pigeonVar_list[6])
 
     return GroupMessage(
       groupMsgId: groupMsgId,
@@ -794,7 +1030,8 @@ struct GroupMessage: Hashable, CustomStringConvertible {
       outgoing: outgoing,
       body: body,
       replyTo: replyTo,
-      createdAtSecs: createdAtSecs
+      createdAtSecs: createdAtSecs,
+      poll: poll
     )
   }
   func toList() -> [Any?] {
@@ -805,13 +1042,14 @@ struct GroupMessage: Hashable, CustomStringConvertible {
       body,
       replyTo,
       createdAtSecs,
+      poll,
     ]
   }
   static func == (lhs: GroupMessage, rhs: GroupMessage) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return HostApiPigeonInternal.deepEquals(lhs.groupMsgId, rhs.groupMsgId) && HostApiPigeonInternal.deepEquals(lhs.authorFingerprint, rhs.authorFingerprint) && HostApiPigeonInternal.deepEquals(lhs.outgoing, rhs.outgoing) && HostApiPigeonInternal.deepEquals(lhs.body, rhs.body) && HostApiPigeonInternal.deepEquals(lhs.replyTo, rhs.replyTo) && HostApiPigeonInternal.deepEquals(lhs.createdAtSecs, rhs.createdAtSecs)
+    return HostApiPigeonInternal.deepEquals(lhs.groupMsgId, rhs.groupMsgId) && HostApiPigeonInternal.deepEquals(lhs.authorFingerprint, rhs.authorFingerprint) && HostApiPigeonInternal.deepEquals(lhs.outgoing, rhs.outgoing) && HostApiPigeonInternal.deepEquals(lhs.body, rhs.body) && HostApiPigeonInternal.deepEquals(lhs.replyTo, rhs.replyTo) && HostApiPigeonInternal.deepEquals(lhs.createdAtSecs, rhs.createdAtSecs) && HostApiPigeonInternal.deepEquals(lhs.poll, rhs.poll)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -822,10 +1060,11 @@ struct GroupMessage: Hashable, CustomStringConvertible {
     HostApiPigeonInternal.deepHash(value: body, hasher: &hasher)
     HostApiPigeonInternal.deepHash(value: replyTo, hasher: &hasher)
     HostApiPigeonInternal.deepHash(value: createdAtSecs, hasher: &hasher)
+    HostApiPigeonInternal.deepHash(value: poll, hasher: &hasher)
   }
 
   public var description: String {
-    return "GroupMessage(groupMsgId: \(String(describing: groupMsgId)), authorFingerprint: \(String(describing: authorFingerprint)), outgoing: \(String(describing: outgoing)), body: \(String(describing: body)), replyTo: \(String(describing: replyTo)), createdAtSecs: \(String(describing: createdAtSecs)))"
+    return "GroupMessage(groupMsgId: \(String(describing: groupMsgId)), authorFingerprint: \(String(describing: authorFingerprint)), outgoing: \(String(describing: outgoing)), body: \(String(describing: body)), replyTo: \(String(describing: replyTo)), createdAtSecs: \(String(describing: createdAtSecs)), poll: \(String(describing: poll)))"
   }
 }
 
@@ -1033,32 +1272,40 @@ private class HostApiPigeonCodecReader: FlutterStandardReader {
       }
       return nil
     case 132:
-      return StartupInfo.fromList(self.readValue() as! [Any?])
+      return NearbyContact.fromList(self.readValue() as! [Any?])
     case 133:
-      return Contact.fromList(self.readValue() as! [Any?])
+      return StartupInfo.fromList(self.readValue() as! [Any?])
     case 134:
-      return Message.fromList(self.readValue() as! [Any?])
+      return Contact.fromList(self.readValue() as! [Any?])
     case 135:
-      return AttachmentInfo.fromList(self.readValue() as! [Any?])
+      return Message.fromList(self.readValue() as! [Any?])
     case 136:
-      return PickedFile.fromList(self.readValue() as! [Any?])
+      return IntroInfo.fromList(self.readValue() as! [Any?])
     case 137:
-      return ConversationSummary.fromList(self.readValue() as! [Any?])
+      return LocationInfo.fromList(self.readValue() as! [Any?])
     case 138:
-      return Reaction.fromList(self.readValue() as! [Any?])
+      return PollInfo.fromList(self.readValue() as! [Any?])
     case 139:
-      return MessageEvent.fromList(self.readValue() as! [Any?])
+      return AttachmentInfo.fromList(self.readValue() as! [Any?])
     case 140:
-      return GroupMember.fromList(self.readValue() as! [Any?])
+      return PickedFile.fromList(self.readValue() as! [Any?])
     case 141:
-      return Group.fromList(self.readValue() as! [Any?])
+      return ConversationSummary.fromList(self.readValue() as! [Any?])
     case 142:
-      return GroupMessage.fromList(self.readValue() as! [Any?])
+      return Reaction.fromList(self.readValue() as! [Any?])
     case 143:
-      return GroupDelivery.fromList(self.readValue() as! [Any?])
+      return MessageEvent.fromList(self.readValue() as! [Any?])
     case 144:
-      return QrCode.fromList(self.readValue() as! [Any?])
+      return GroupMember.fromList(self.readValue() as! [Any?])
     case 145:
+      return Group.fromList(self.readValue() as! [Any?])
+    case 146:
+      return GroupMessage.fromList(self.readValue() as! [Any?])
+    case 147:
+      return GroupDelivery.fromList(self.readValue() as! [Any?])
+    case 148:
+      return QrCode.fromList(self.readValue() as! [Any?])
+    case 149:
       return NetworkStatus.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -1077,47 +1324,59 @@ private class HostApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? PermissionState {
       super.writeByte(131)
       super.writeValue(value.rawValue)
-    } else if let value = value as? StartupInfo {
+    } else if let value = value as? NearbyContact {
       super.writeByte(132)
       super.writeValue(value.toList())
-    } else if let value = value as? Contact {
+    } else if let value = value as? StartupInfo {
       super.writeByte(133)
       super.writeValue(value.toList())
-    } else if let value = value as? Message {
+    } else if let value = value as? Contact {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? AttachmentInfo {
+    } else if let value = value as? Message {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? PickedFile {
+    } else if let value = value as? IntroInfo {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? ConversationSummary {
+    } else if let value = value as? LocationInfo {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? Reaction {
+    } else if let value = value as? PollInfo {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? MessageEvent {
+    } else if let value = value as? AttachmentInfo {
       super.writeByte(139)
       super.writeValue(value.toList())
-    } else if let value = value as? GroupMember {
+    } else if let value = value as? PickedFile {
       super.writeByte(140)
       super.writeValue(value.toList())
-    } else if let value = value as? Group {
+    } else if let value = value as? ConversationSummary {
       super.writeByte(141)
       super.writeValue(value.toList())
-    } else if let value = value as? GroupMessage {
+    } else if let value = value as? Reaction {
       super.writeByte(142)
       super.writeValue(value.toList())
-    } else if let value = value as? GroupDelivery {
+    } else if let value = value as? MessageEvent {
       super.writeByte(143)
       super.writeValue(value.toList())
-    } else if let value = value as? QrCode {
+    } else if let value = value as? GroupMember {
       super.writeByte(144)
       super.writeValue(value.toList())
-    } else if let value = value as? NetworkStatus {
+    } else if let value = value as? Group {
       super.writeByte(145)
+      super.writeValue(value.toList())
+    } else if let value = value as? GroupMessage {
+      super.writeByte(146)
+      super.writeValue(value.toList())
+    } else if let value = value as? GroupDelivery {
+      super.writeByte(147)
+      super.writeValue(value.toList())
+    } else if let value = value as? QrCode {
+      super.writeByte(148)
+      super.writeValue(value.toList())
+    } else if let value = value as? NetworkStatus {
+      super.writeByte(149)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -1147,7 +1406,16 @@ class HostApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol VlHostApi {
   func start() throws -> StartupInfo
-  func createIdentity() throws
+  /// Internet mailbox (ADR-039): sealed envelopes to upload (mine first),
+  /// confirmation that the mailbox holds them, the tags to fetch, and one
+  /// fetched envelope (true if it was new). The app does the HTTP itself.
+  func internetOutbox() throws -> [FlutterStandardTypedData]
+  func internetUploaded(envelopes: [FlutterStandardTypedData]) throws
+  func internetTags() throws -> [FlutterStandardTypedData]
+  func receiveInternet(envelope: FlutterStandardTypedData) throws -> Bool
+  /// Creates this phone's identity, or brings back the one this phone had
+  /// before a reinstall (ADR-038). True when it was restored.
+  func createIdentity() throws -> Bool
   func myFingerprint() throws -> FlutterStandardTypedData
   func setting(key: String) throws -> String?
   func setSetting(key: String, value: String?) throws
@@ -1207,11 +1475,38 @@ protocol VlHostApi {
   func sendGroupMessage(groupId: FlutterStandardTypedData, text: String, replyTo: FlutterStandardTypedData?) throws -> FlutterStandardTypedData
   func groupDelivery(groupMsgId: FlutterStandardTypedData) throws -> GroupDelivery
   func networkStatus() throws -> NetworkStatus
+  /// One GPS fix for "Share location" (ADR-034). Asks for location permission
+  /// the first time; null if refused or no fix within about 20 s.
+  func currentLocation() async throws -> LocationInfo?
+  /// Shares a fix with a contact; returns the message id.
+  func sendLocation(contactId: FlutterStandardTypedData, fix: LocationInfo) throws -> FlutterStandardTypedData
+  /// Opens the system Maps app at a position (it may need the internet).
+  func openMap(latE7: Int64, lonE7: Int64, label: String) throws
+  /// Polls (ADR-035): start one in a chat or a group; returns its id.
+  func sendPoll(contactId: FlutterStandardTypedData, question: String, options: [String], multi: Bool) throws -> FlutterStandardTypedData
+  func sendGroupPoll(groupId: FlutterStandardTypedData, question: String, options: [String], multi: Bool) throws -> FlutterStandardTypedData
+  /// Introductions (ADR-037).
+  func introduce(contactA: FlutterStandardTypedData, contactB: FlutterStandardTypedData) throws -> FlutterStandardTypedData
+  func acceptIntro(introId: FlutterStandardTypedData, myName: String) throws
+  func declineIntro(introId: FlutterStandardTypedData) throws
+  /// QR "paper" message (ADR-036): the sealed envelope of one of my
+  /// undelivered messages as `VLM1:` text, and taking a scanned one (returns
+  /// the contact id it came from).
+  func paperMessage(messageId: FlutterStandardTypedData) throws -> String
+  func receivePaper(code: String) throws -> FlutterStandardTypedData
+  /// My whole choice for a poll (bit i = option i; 0 withdraws).
+  func vote(pollId: FlutterStandardTypedData, choices: Int64) throws
+  /// Paired, unblocked contacts seen over Bluetooth in the last `withinSecs`.
+  func nearbyContacts(withinSecs: Int64) throws -> [NearbyContact]
   /// Starts or stops scanning, advertising and link sessions. The choice is
   /// persisted. On iOS the first start shows the system Bluetooth prompt.
   func setRelayEnabled(enabled: Bool) throws
   /// Android: 1 = relay only while charging, 2 = always (foreground service).
   func setRelayMode(mode: Int64) throws
+  /// Seconds before syncing with the same nearby phone again (ADR-032): 1 ..= 45, default 5.
+  func resyncSecs() throws -> Int64
+  /// Stores the interval (clamped to 1 ..= 45) and returns the stored value.
+  func setResyncSecs(secs: Int64) throws -> Int64
   /// Device biometrics or passcode can be used for the app lock.
   func canAuthenticate() throws -> Bool
   func authenticate(reason: String) async throws -> Bool
@@ -1226,6 +1521,8 @@ protocol VlHostApi {
   /// link instead of Bluetooth. Real crypto, real databases.
   func debugCreatePeer(name: String) throws -> Contact
   func debugPeerSend(text: String) throws
+  /// The peer sends this file as an attachment (real chunking and encryption).
+  func debugPeerSendFile(name: String, data: FlutterStandardTypedData) throws
   func debugExchange() throws
 }
 
@@ -1255,14 +1552,83 @@ class VlHostApiSetup {
     } else {
       startChannel.setMessageHandler(nil)
     }
+    /// Internet mailbox (ADR-039): sealed envelopes to upload (mine first),
+    /// confirmation that the mailbox holds them, the tags to fetch, and one
+    /// fetched envelope (true if it was new). The app does the HTTP itself.
+    let internetOutboxChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.internetOutbox\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.internetOutbox\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      internetOutboxChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.internetOutbox()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      internetOutboxChannel.setMessageHandler(nil)
+    }
+    let internetUploadedChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.internetUploaded\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.internetUploaded\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      internetUploadedChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let envelopesArg = args[0] as! [FlutterStandardTypedData]
+        do {
+          try api.internetUploaded(envelopes: envelopesArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      internetUploadedChannel.setMessageHandler(nil)
+    }
+    let internetTagsChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.internetTags\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.internetTags\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      internetTagsChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.internetTags()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      internetTagsChannel.setMessageHandler(nil)
+    }
+    let receiveInternetChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.receiveInternet\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.receiveInternet\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      receiveInternetChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let envelopeArg = args[0] as! FlutterStandardTypedData
+        do {
+          let result = try api.receiveInternet(envelope: envelopeArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      receiveInternetChannel.setMessageHandler(nil)
+    }
+    /// Creates this phone's identity, or brings back the one this phone had
+    /// before a reinstall (ADR-038). True when it was restored.
     let createIdentityChannel = taskQueue == nil
       ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.createIdentity\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
       : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.createIdentity\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
     if let api = api {
       createIdentityChannel.setMessageHandler { _, reply in
         do {
-          try api.createIdentity()
-          reply(wrapResult(nil))
+          let result = try api.createIdentity()
+          reply(wrapResult(result))
         } catch {
           reply(wrapError(error))
         }
@@ -2136,6 +2502,229 @@ class VlHostApiSetup {
     } else {
       networkStatusChannel.setMessageHandler(nil)
     }
+    /// One GPS fix for "Share location" (ADR-034). Asks for location permission
+    /// the first time; null if refused or no fix within about 20 s.
+    let currentLocationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.currentLocation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      currentLocationChannel.setMessageHandler { _, reply in
+        Task { @MainActor in
+          do {
+            let result = try await api.currentLocation()
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      currentLocationChannel.setMessageHandler(nil)
+    }
+    /// Shares a fix with a contact; returns the message id.
+    let sendLocationChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.sendLocation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.sendLocation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      sendLocationChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let contactIdArg = args[0] as! FlutterStandardTypedData
+        let fixArg = args[1] as! LocationInfo
+        do {
+          let result = try api.sendLocation(contactId: contactIdArg, fix: fixArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      sendLocationChannel.setMessageHandler(nil)
+    }
+    /// Opens the system Maps app at a position (it may need the internet).
+    let openMapChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.openMap\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      openMapChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let latE7Arg = args[0] as! Int64
+        let lonE7Arg = args[1] as! Int64
+        let labelArg = args[2] as! String
+        do {
+          try api.openMap(latE7: latE7Arg, lonE7: lonE7Arg, label: labelArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      openMapChannel.setMessageHandler(nil)
+    }
+    /// Polls (ADR-035): start one in a chat or a group; returns its id.
+    let sendPollChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.sendPoll\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.sendPoll\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      sendPollChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let contactIdArg = args[0] as! FlutterStandardTypedData
+        let questionArg = args[1] as! String
+        let optionsArg = args[2] as! [String]
+        let multiArg = args[3] as! Bool
+        do {
+          let result = try api.sendPoll(contactId: contactIdArg, question: questionArg, options: optionsArg, multi: multiArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      sendPollChannel.setMessageHandler(nil)
+    }
+    let sendGroupPollChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.sendGroupPoll\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.sendGroupPoll\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      sendGroupPollChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let groupIdArg = args[0] as! FlutterStandardTypedData
+        let questionArg = args[1] as! String
+        let optionsArg = args[2] as! [String]
+        let multiArg = args[3] as! Bool
+        do {
+          let result = try api.sendGroupPoll(groupId: groupIdArg, question: questionArg, options: optionsArg, multi: multiArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      sendGroupPollChannel.setMessageHandler(nil)
+    }
+    /// Introductions (ADR-037).
+    let introduceChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.introduce\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.introduce\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      introduceChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let contactAArg = args[0] as! FlutterStandardTypedData
+        let contactBArg = args[1] as! FlutterStandardTypedData
+        do {
+          let result = try api.introduce(contactA: contactAArg, contactB: contactBArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      introduceChannel.setMessageHandler(nil)
+    }
+    let acceptIntroChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.acceptIntro\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.acceptIntro\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      acceptIntroChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let introIdArg = args[0] as! FlutterStandardTypedData
+        let myNameArg = args[1] as! String
+        do {
+          try api.acceptIntro(introId: introIdArg, myName: myNameArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      acceptIntroChannel.setMessageHandler(nil)
+    }
+    let declineIntroChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.declineIntro\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.declineIntro\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      declineIntroChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let introIdArg = args[0] as! FlutterStandardTypedData
+        do {
+          try api.declineIntro(introId: introIdArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      declineIntroChannel.setMessageHandler(nil)
+    }
+    /// QR "paper" message (ADR-036): the sealed envelope of one of my
+    /// undelivered messages as `VLM1:` text, and taking a scanned one (returns
+    /// the contact id it came from).
+    let paperMessageChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.paperMessage\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.paperMessage\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      paperMessageChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let messageIdArg = args[0] as! FlutterStandardTypedData
+        do {
+          let result = try api.paperMessage(messageId: messageIdArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      paperMessageChannel.setMessageHandler(nil)
+    }
+    let receivePaperChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.receivePaper\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.receivePaper\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      receivePaperChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let codeArg = args[0] as! String
+        do {
+          let result = try api.receivePaper(code: codeArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      receivePaperChannel.setMessageHandler(nil)
+    }
+    /// My whole choice for a poll (bit i = option i; 0 withdraws).
+    let voteChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.vote\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.vote\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      voteChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let pollIdArg = args[0] as! FlutterStandardTypedData
+        let choicesArg = args[1] as! Int64
+        do {
+          try api.vote(pollId: pollIdArg, choices: choicesArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      voteChannel.setMessageHandler(nil)
+    }
+    /// Paired, unblocked contacts seen over Bluetooth in the last `withinSecs`.
+    let nearbyContactsChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.nearbyContacts\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.nearbyContacts\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      nearbyContactsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let withinSecsArg = args[0] as! Int64
+        do {
+          let result = try api.nearbyContacts(withinSecs: withinSecsArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      nearbyContactsChannel.setMessageHandler(nil)
+    }
     /// Starts or stops scanning, advertising and link sessions. The choice is
     /// persisted. On iOS the first start shows the system Bluetooth prompt.
     let setRelayEnabledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.setRelayEnabled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
@@ -2168,6 +2757,36 @@ class VlHostApiSetup {
       }
     } else {
       setRelayModeChannel.setMessageHandler(nil)
+    }
+    /// Seconds before syncing with the same nearby phone again (ADR-032): 1 ..= 45, default 5.
+    let resyncSecsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.resyncSecs\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      resyncSecsChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.resyncSecs()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      resyncSecsChannel.setMessageHandler(nil)
+    }
+    /// Stores the interval (clamped to 1 ..= 45) and returns the stored value.
+    let setResyncSecsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.setResyncSecs\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setResyncSecsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let secsArg = args[0] as! Int64
+        do {
+          let result = try api.setResyncSecs(secs: secsArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setResyncSecsChannel.setMessageHandler(nil)
     }
     /// Device biometrics or passcode can be used for the app lock.
     let canAuthenticateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.canAuthenticate\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
@@ -2308,6 +2927,25 @@ class VlHostApiSetup {
       }
     } else {
       debugPeerSendChannel.setMessageHandler(nil)
+    }
+    /// The peer sends this file as an attachment (real chunking and encryption).
+    let debugPeerSendFileChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.debugPeerSendFile\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.debugPeerSendFile\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      debugPeerSendFileChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let nameArg = args[0] as! String
+        let dataArg = args[1] as! FlutterStandardTypedData
+        do {
+          try api.debugPeerSendFile(name: nameArg, data: dataArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      debugPeerSendFileChannel.setMessageHandler(nil)
     }
     let debugExchangeChannel = taskQueue == nil
       ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.vl_host.VlHostApi.debugExchange\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)

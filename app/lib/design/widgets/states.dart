@@ -169,3 +169,50 @@ void showMessage(BuildContext context, String text) {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(text)));
 }
+
+/// Asks for a short name. The dialog owns its text controller, so it is
+/// disposed only after the dialog has finished closing; disposing it right
+/// after `showDialog` returns breaks the closing animation.
+Future<String?> askName(BuildContext context, {required String title, required String initial, String? note}) =>
+    showAdaptiveDialog<String>(
+      context: context,
+      builder: (_) => _NameDialog(title: title, initial: initial, note: note),
+    );
+
+class _NameDialog extends StatefulWidget {
+  const _NameDialog({required this.title, required this.initial, this.note});
+  final String title;
+  final String initial;
+  final String? note;
+
+  @override
+  State<_NameDialog> createState() => _NameDialogState();
+}
+
+class _NameDialogState extends State<_NameDialog> {
+  late final _text = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(controller: _text, autofocus: true, maxLength: 32, textCapitalization: TextCapitalization.words),
+          if (widget.note != null) Text(widget.note!, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context, _text.text.trim()), child: const Text('Save')),
+      ],
+    );
+  }
+}

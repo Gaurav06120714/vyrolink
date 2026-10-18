@@ -18,5 +18,6 @@ hmac = "=0.13.0"
 sha2 = "=0.11.1"
 x25519-dalek = { version = "=3.0.0", features = ["static_secrets", "zeroize"] }
 zeroize = { version = "1.9", features = ["derive"] }
+serde_json = "=1.0.154"
 getrandom = "0.4"
 snow = { version = "=0.10.0", default-features = false, features = ["default-resolver", "use-curve25519", "use-chacha20poly1305", "use-sha2", "use-getrandom"] }

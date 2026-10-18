@@ -62,6 +62,15 @@ impl LinkHandshake {
         self.0.is_handshake_finished()
     }
 
+    /// The Noise handshake hash `h`: identical on both ends of one link and
+    /// unique to it. Presence tags (ADR-029) are bound to it.
+    pub fn handshake_hash(&self) -> Result<[u8; 32], CryptoError> {
+        self.0
+            .get_handshake_hash()
+            .try_into()
+            .map_err(|_| CryptoError::Noise("unexpected handshake hash length".into()))
+    }
+
     pub fn into_transport(self) -> Result<LinkTransport, CryptoError> {
         self.0
             .into_transport_mode()
@@ -111,6 +120,7 @@ mod tests {
         r.read_message(&i.write_message().unwrap()).unwrap();
         i.read_message(&r.write_message().unwrap()).unwrap();
         assert!(i.is_finished() && r.is_finished());
+        assert_eq!(i.handshake_hash().unwrap(), r.handshake_hash().unwrap());
         (i.into_transport().unwrap(), r.into_transport().unwrap())
     }
 

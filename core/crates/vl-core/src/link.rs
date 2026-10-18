@@ -1,7 +1,13 @@
-use crate::{CoreError, CoreResult, Node, now_min};
-use vl_crypto::{LinkHandshake, LinkTransport};
-use vl_proto::{Deframer, LinkMessage, MAX_FRAME_LEN, frame};
+use crate::{CoreError, CoreResult, Node, now_min, secs_i64};
+use std::collections::HashSet;
+use vl_crypto::{LinkHandshake, LinkTransport, random_array};
+use vl_proto::{
+    Deframer, FEATURE_PRESENCE, LinkMessage, MAX_FRAME_LEN, MAX_ITEMS, PRESENCE_PAD, frame,
+};
 use vl_routing::LinkSession;
+
+/// A contact seen again after at least this long away counts as a new arrival.
+pub const ARRIVAL_GAP_SECS: u64 = 30 * 60;
 
 /// Noise adds a 16-byte tag to every transport message.
 const MAX_WIRE_FRAME: usize = MAX_FRAME_LEN + 16;
@@ -20,6 +26,9 @@ pub(crate) struct Link {
     initiator: bool,
     deframer: Deframer,
     session: LinkSession,
+    /// Noise handshake hash; presence tags are bound to it (ADR-029).
+    handshake_hash: [u8; 32],
+    presence_sent: bool,
 }
 
 impl Node {
@@ -44,6 +53,8 @@ impl Node {
                 initiator,
                 deframer: Deframer::new(MAX_WIRE_FRAME),
                 session: LinkSession::new(self.policy),
+                handshake_hash: [0; 32],
+                presence_sent: false,
             },
         );
         Ok((id, first))
@@ -100,8 +111,12 @@ impl Node {
                     out.extend(frame(&hs.write_message()?)?);
                 }
                 if hs.is_finished() {
+                    link.handshake_hash = hs.handshake_hash()?;
                     let mut t = (*hs).into_transport()?;
-                    for m in link.session.open(&self.relay)? {
+                    for mut m in link.session.open(&self.relay)? {
+                        if let LinkMessage::Hello(h) = &mut m {
+                            h.features |= FEATURE_PRESENCE;
+                        }
                         out.extend(frame(&t.encrypt(&m.encode()?)?)?);
                     }
                     link.phase = Phase::Transport(t);
@@ -112,8 +127,25 @@ impl Node {
             Phase::Transport(mut t) => {
                 let msg = LinkMessage::decode(&t.decrypt(f)?)?;
                 let now = now_min(now_secs);
+                let mut send = Vec::new();
+                match &msg {
+                    LinkMessage::Presence(tags) => {
+                        self.on_presence(tags, &link.handshake_hash, now_secs)?;
+                        link.phase = Phase::Transport(t);
+                        return Ok(());
+                    }
+                    LinkMessage::Hello(h)
+                        if h.features & FEATURE_PRESENCE != 0 && !link.presence_sent =>
+                    {
+                        link.presence_sent = true;
+                        send.push(LinkMessage::Presence(
+                            self.presence_tags(&link.handshake_hash)?,
+                        ));
+                    }
+                    _ => {}
+                }
                 let (replies, events) = link.session.handle(msg, &mut self.relay, now);
-                let mut send = replies;
+                send.extend(replies);
                 if self.apply_events(events, now_secs)? && !link.session.is_closed() {
                     send.extend(link.session.refresh(&self.relay, now)?);
                 }
@@ -125,5 +157,82 @@ impl Node {
             Phase::Failed => return Err(CoreError::UnknownLink),
         }
         Ok(())
+    }
+}
+
+impl Node {
+    /// This device's presence tags for one link: one per unblocked contact,
+    /// padded with random values to a multiple of [`PRESENCE_PAD`] so the peer
+    /// learns only a coarse contact count (ADR-029).
+    fn presence_tags(&self, handshake_hash: &[u8; 32]) -> CoreResult<Vec<[u8; 16]>> {
+        let mut tags = Vec::new();
+        // ponytail: only the first 128 contacts (MAX_ITEMS) are announced; rotate
+        // which ones per link if anyone ever has more.
+        for c in self
+            .conv
+            .contacts()?
+            .into_iter()
+            .filter(|c| !c.blocked)
+            .take(MAX_ITEMS)
+        {
+            tags.push(self.pair_keys(&c.contact_ref)?.presence_out(handshake_hash));
+        }
+        let padded = tags.len().div_ceil(PRESENCE_PAD).max(1) * PRESENCE_PAD;
+        while tags.len() < padded.min(MAX_ITEMS) {
+            tags.push(random_array()?);
+        }
+        Ok(tags)
+    }
+
+    /// Records every unblocked contact whose tag the peer showed on this link.
+    fn on_presence(
+        &mut self,
+        tags: &[[u8; 16]],
+        handshake_hash: &[u8; 32],
+        now_secs: u64,
+    ) -> CoreResult<()> {
+        let shown: HashSet<&[u8; 16]> = tags.iter().collect();
+        for c in self.conv.contacts()?.into_iter().filter(|c| !c.blocked) {
+            if shown.contains(&self.pair_keys(&c.contact_ref)?.presence_in(handshake_hash)) {
+                let prev = self.nearby.insert(c.contact_id, now_secs);
+                // ADR-033: keep only the latest sighting, encrypted at rest.
+                self.conv.touch_seen(&c.contact_id, secs_i64(now_secs))?;
+                if prev.is_none_or(|p| now_secs.saturating_sub(p) >= ARRIVAL_GAP_SECS) {
+                    self.nearby_arrivals = self.nearby_arrivals.saturating_add(1);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// How many contacts came into range (first time, or after
+    /// [`ARRIVAL_GAP_SECS`] away) since the last call. Hosts use it for one
+    /// generic "A contact is nearby" notification; it never says who.
+    pub fn take_nearby_arrivals(&mut self) -> u32 {
+        std::mem::take(&mut self.nearby_arrivals)
+    }
+
+    /// Unblocked contacts seen over Bluetooth within `within_secs`, with the
+    /// time they were last seen. Nothing here survives a restart.
+    pub fn nearby_contacts(
+        &self,
+        now_secs: u64,
+        within_secs: u64,
+    ) -> CoreResult<Vec<([u8; 16], u64)>> {
+        let blocked: HashSet<[u8; 16]> = self
+            .conv
+            .contacts()?
+            .into_iter()
+            .filter(|c| c.blocked)
+            .map(|c| c.contact_id)
+            .collect();
+        Ok(self
+            .nearby
+            .iter()
+            .filter(|(id, seen)| {
+                !blocked.contains(*id) && now_secs.saturating_sub(**seen) <= within_secs
+            })
+            .map(|(id, seen)| (*id, *seen))
+            .collect())
     }
 }

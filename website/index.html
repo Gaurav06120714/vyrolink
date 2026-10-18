@@ -207,7 +207,7 @@ footer a { color: var(--text2); }
           <a class="btn" href="#how">See how it works</a>
           <a href="#privacy">Read the privacy policy</a>
         </div>
-        <p class="note">No phone number. No account. No servers. Coming to iPhone and Android.</p>
+        <p class="note">No phone number. No account needed. No servers needed. Coming to iPhone and Android.</p>
       </div>
       <figure class="shot" style="margin:0">
         <p class="callout" aria-hidden="true"><b>“Delivered” is earned</b>shown only after the other phone sends back a signed receipt</p>
@@ -312,7 +312,8 @@ footer a { color: var(--text2); }
         <div><dt>Search, drafts and pins</dt><dd>All kept in an encrypted database on your phone, never anywhere else.</dd></div>
         <div><dt>App lock and panic wipe</dt><dd>Lock with your face, fingerprint or passcode. Panic wipe destroys the keys first, then the data.</dd></div>
         <div><dt>You decide what you carry</dt><dd>Set how much space other people's sealed mail may use, and on Android, whether to relay always or only while charging.</dd></div>
-        <div><dt>Quiet notifications</dt><dd>They only ever say “You have a new message”. Never who, never what.</dd></div>
+        <div><dt>Know when a friend is near</dt><dd>See “Nearby” when a contact you paired with is in Bluetooth range. Strangers can't tell it's you.</dd></div>
+        <div><dt>Quiet notifications</dt><dd>They only say “You have a new message” or “A contact is nearby”. Never who, never what.</dd></div>
       </dl>
     </div>
   </section>
@@ -379,18 +380,32 @@ footer a { color: var(--text2); }
     <div class="wrap policy">
       <p class="eyebrow">Privacy policy</p>
       <h2>We don't collect your data, because we never receive it.</h2>
-      <p class="meta">Effective 16 October 2026 · Applies to the VYRO LINK apps for iPhone and Android and to this website.</p>
+      <p class="meta">Effective 18 October 2026 · Applies to the VYRO LINK apps for iPhone and Android and to this website.</p>
 
-      <p class="tldr"><strong>In short:</strong> VYRO LINK has no accounts and no servers. Your messages, contacts and keys stay on your phone, encrypted. We, the developers, cannot see any of it.</p>
+      <p class="tldr"><strong>In short:</strong> VYRO LINK needs no account and no servers. If you turn on <em>Use internet when available</em>, sealed messages also pass through our mailbox, which cannot read them. Your messages, contacts and keys stay on your phone, encrypted. We, the developers, cannot see any of it. Signing in with Google is optional; if you do, your Google name and email are also kept only on your phone.</p>
 
       <h3>What we collect</h3>
       <p>Nothing. The app does not send your messages, contacts, ID, location, device identifiers or usage data to us or to anyone else. It contains no analytics, advertising or tracking code.</p>
 
+      <h3>Optional internet mailbox</h3>
+      <p>It is off unless you turn on <strong>Use internet when available</strong> (Network → Relay settings). Then, while the app is open, your phone also uploads the same sealed messages it would hand to nearby phones, and downloads the ones addressed to it, so a message gets through when either phone has a connection. The mailbox holds only sealed envelopes it cannot open. Each shows a rotating code that changes every few hours instead of who it is for, an expiry time and a size. It deletes them when they expire, after at most about a week. Like any server, it sees the IP address and the time of each connection; it keeps addresses only in memory for a minute, to limit abuse, and writes no logs of them. Turn the switch off to stop using it.</p>
+
+      <h3>Optional Google sign-in</h3>
+      <p>You can choose to sign in with Google during setup or in Settings. You don't need it to use VYRO LINK. If you do, Google shows its own sign-in screen and then gives the app your <strong>name and email address</strong>. The app uses them only to fill in your name and to show which account you used. They are stored encrypted on your phone. They are never sent to us, never shared with your contacts and never sent over Bluetooth.</p>
+      <p>Signing in needs an internet connection, and Google's own <a href="https://policies.google.com/privacy">privacy policy</a> applies to that step. Sign out in Settings, or use Panic wipe, to remove the name and email from your phone and end the app's Google session.</p>
+
       <h3>What stays on your phone</h3>
       <ul>
         <li><strong>Messages, contacts and settings</strong> are kept in an encrypted database. Its key is protected by your phone's secure storage (Keychain on iPhone, Keystore on Android).</li>
-        <li><strong>Your identity key</strong> is created on your phone and never leaves it. App data is excluded from device and cloud backups.</li>
+        <li><strong>Your identity key</strong> is created on your phone and is never sent to us or anyone else. App data is excluded from device and cloud backups. So that reinstalling keeps your VYRO LINK ID, a copy of the long-term key (not your messages) is kept in the phone's own secure storage: the iPhone Keychain, on this device only, or Google Block Store on Android, with cloud backup turned off. Android may also include Block Store data when you copy everything to a new phone with Google's setup tool. Panic wipe deletes this copy too.</li>
         <li><strong>Photos and files</strong> you send are re-encoded or read only when you pick them. Photo location data is removed before sending.</li>
+      </ul>
+
+      <h3>Things you choose to share</h3>
+      <ul>
+        <li><strong>Location:</strong> when you tap Share location, one position (and its accuracy) goes to that contact, encrypted end to end like a message. The app can show how far away a shared location is; it works that out on your phone.</li>
+        <li><strong>Polls and votes</strong> go only to the people in that chat or group, encrypted.</li>
+        <li><strong>Introductions:</strong> if you introduce two contacts, each is asked first, and their keys pass through your phone encrypted. Introduced contacts are marked as not met in person.</li>
       </ul>
 
       <h3>What other phones see</h3>
@@ -398,19 +413,22 @@ footer a { color: var(--text2); }
         <li><strong>Phones that carry your messages</strong> hold sealed copies they cannot read. A copy does not show your name, your ID or who it is for, and it is deleted when it expires.</li>
         <li><strong>Nearby phones</strong> see only a fixed VYRO LINK Bluetooth signal, with no name or ID in it.</li>
         <li><strong>Your contacts</strong> see the name and ID you chose to share when you paired with them.</li>
+        <li><strong>Phones of people you paired with</strong> can tell when your phone is in Bluetooth range, so the app can show “Nearby” and when you were last seen nearby. Other phones can't: the signal changes every connection and doesn't identify you. Each phone keeps only the latest “last seen” time per contact, encrypted on that phone.</li>
       </ul>
 
       <h3>Permissions</h3>
       <ul>
         <li><strong>Bluetooth:</strong> to exchange messages with nearby phones.</li>
         <li><strong>Camera:</strong> only to scan a pairing QR code. Camera images are not saved.</li>
-        <li><strong>Notifications:</strong> to say “You have a new message”, with no sender or text.</li>
+        <li><strong>Location:</strong> only when you choose to share it with a contact (see above).</li>
+        <li><strong>Notifications:</strong> to say “You have a new message” or “A contact is nearby”, with no names or text.</li>
+        <li><strong>Internet:</strong> used only for the optional Google sign-in and, if you turn it on, the internet mailbox. With the mailbox off, messages never use the internet.</li>
         <li><strong>Face ID, Touch ID or fingerprint:</strong> only if you turn on app lock. Your phone checks it; the app never sees your biometrics.</li>
       </ul>
-      <p>VYRO LINK does not ask for your location.</p>
+      <p>VYRO LINK asks for your location only when you tap <strong>Share location</strong> in a chat. It reads one position, sends it end-to-end encrypted to the contact you chose, and does not track you or share it again.</p>
 
       <h3>Deleting your data</h3>
-      <p>Because everything is stored only on your phone, you are in control of it. Delete a message or a contact in the app, use Panic wipe in Settings to erase everything, or uninstall the app. There is nothing for us to delete, because we never had it.</p>
+      <p>Because everything is stored only on your phone, you are in control of it. Delete a message or a contact in the app, or use Panic wipe in Settings to erase everything, including the copy of your ID key. Uninstalling removes your messages and contacts but keeps your ID for a later reinstall on the same phone; use Panic wipe first to remove it too. Sealed envelopes in the mailbox expire by themselves within about a week. There is nothing else for us to delete, because we never had it.</p>
 
       <h3>This website</h3>
       <p>This page sets no cookies and loads nothing from other companies: no fonts, scripts or analytics. Our hosting provider may keep standard server logs, such as IP addresses, for security.</p>
@@ -419,7 +437,7 @@ footer a { color: var(--text2); }
       <p>VYRO LINK is not directed at children under 13.</p>
 
       <h3>Changes</h3>
-      <p>If we ever add something that handles personal data, such as an optional sign-in, we will update this policy before that version is released and say exactly what is collected and why. The date at the top will change with it.</p>
+      <p>If we add anything else that handles personal data, we will update this policy before that version is released and say exactly what is collected and why. The date at the top will change with it.</p>
 
       <h3>Contact</h3>
       <p>Questions about privacy: <a href="mailto:hello@vyrolink.me">hello@vyrolink.me</a></p>

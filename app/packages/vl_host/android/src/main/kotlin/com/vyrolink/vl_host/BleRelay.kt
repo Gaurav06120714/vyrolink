@@ -59,7 +59,6 @@ internal class BleRelay(
   private companion object {
     const val IDLE_MS = 4_000L
     const val SESSION_LIMIT_MS = 60_000L
-    const val COOLDOWN_MS = 45_000L
     const val MAX_CENTRAL_LINKS = 2
     const val MAINTAIN_EVERY_MS = 15 * 60_000L
     const val ATT_OVERHEAD = 3
@@ -207,7 +206,8 @@ internal class BleRelay(
     if (!advertising) {
       a.bluetoothLeAdvertiser?.startAdvertising(
         AdvertiseSettings.Builder()
-          .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+          // Fast beacons (ADR-032): about 10 adverts a second so phones find each other quickly.
+          .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
           .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
           .setConnectable(true)
           .setTimeout(0)
@@ -220,7 +220,7 @@ internal class BleRelay(
       // One long filtered scan: survives screen-off and avoids the scan-start throttle.
       a.bluetoothLeScanner?.startScan(
         listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE_UUID)).build()),
-        ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build(),
+        ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
         scanCallback,
       )
       scanning = true
@@ -338,7 +338,9 @@ internal class BleRelay(
     node()?.linkClose(s.linkId)
     if (asCentral) {
       this.asCentral.remove(key)
-      cooldownUntil[key] = SystemClock.elapsedRealtime() + COOLDOWN_MS
+      // ADR-032: the user's re-sync interval (1–45 s, default 5).
+      val resyncMs = (node()?.resyncSecs()?.toLong() ?: 5L) * 1_000L
+      cooldownUntil[key] = SystemClock.elapsedRealtime() + resyncMs
     } else {
       asPeripheral.remove(key)
     }
@@ -361,6 +363,9 @@ internal class BleRelay(
   }
 
   private fun notifyIfNew() {
+    // ADR-029: a paired contact came into range. Says nobody's name.
+    val arrived = runCatching { node()?.takeNearbyArrivals() ?: 0u }.getOrDefault(0u)
+    if (arrived > 0u && !VlHostPlugin.inForeground) Notifier.contactNearby(context)
     val unread = runCatching { node()?.conversationSummaries()?.sumOf { it.unread.toInt() } }.getOrNull() ?: return
     val before = lastUnread
     lastUnread = unread

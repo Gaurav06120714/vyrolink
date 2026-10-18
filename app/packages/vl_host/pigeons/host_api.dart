@@ -29,6 +29,16 @@ enum DeliveryState {
 
 enum RadioState { unknown, unsupported, unauthorized, poweredOff, poweredOn }
 
+/// A paired contact proven to be in Bluetooth range (ADR-029). The hosts keep
+/// it in memory only; it is never stored.
+class NearbyContact {
+  NearbyContact({required this.contactId, required this.seenSecs});
+  Uint8List contactId;
+
+  /// Unix seconds of the last link that showed this contact's presence tag.
+  int seenSecs;
+}
+
 enum PermissionState { granted, denied, notDetermined, restricted }
 
 class StartupInfo {
@@ -47,6 +57,8 @@ class Contact {
     required this.verified,
     required this.blocked,
     required this.safetyNumber,
+    this.lastSeenSecs,
+    this.introducedBy,
   });
   Uint8List contactId;
   String displayName;
@@ -57,6 +69,12 @@ class Contact {
   bool verified;
   bool blocked;
   String safetyNumber;
+
+  /// Unix seconds this contact was last proven nearby over Bluetooth (ADR-033).
+  int? lastSeenSecs;
+
+  /// Who introduced this contact (ADR-037); null if met in person.
+  String? introducedBy;
 }
 
 class Message {
@@ -75,6 +93,9 @@ class Message {
     required this.pinned,
     required this.starred,
     this.attachment,
+    this.location,
+    this.poll,
+    this.intro,
   });
   Uint8List messageId;
   Uint8List contactId;
@@ -90,6 +111,46 @@ class Message {
   bool pinned;
   bool starred;
   AttachmentInfo? attachment;
+  LocationInfo? location;
+  PollInfo? poll;
+  IntroInfo? intro;
+}
+
+/// An introduction under its message (ADR-037). `state`: 0 asked, 1 accepted,
+/// 2 declined, 3 connected, 4 failed (the card did not match).
+class IntroInfo {
+  IntroInfo({required this.introId, required this.otherName, required this.state});
+  Uint8List introId;
+  String otherName;
+  int state;
+}
+
+/// A shared position (ADR-034): degrees × 10⁷ (WGS 84), accuracy in metres,
+/// and when the GPS fix was taken (Unix ms).
+class LocationInfo {
+  LocationInfo({required this.latE7, required this.lonE7, required this.accuracyM, required this.capturedMs});
+  int latE7;
+  int lonE7;
+  int accuracyM;
+  int capturedMs;
+}
+
+/// A poll with live counts (ADR-035). Bit i of `mine` = I chose option i.
+class PollInfo {
+  PollInfo({
+    required this.question,
+    required this.options,
+    required this.multi,
+    required this.counts,
+    required this.mine,
+    required this.voters,
+  });
+  String question;
+  List<String> options;
+  bool multi;
+  List<int> counts;
+  int mine;
+  int voters;
 }
 
 /// ADR-026. `kind` 1 = image (JPEG, ≤ 16 KiB), 2 = file (≤ 64 KiB).
@@ -174,6 +235,7 @@ class GroupMessage {
     required this.body,
     this.replyTo,
     required this.createdAtSecs,
+    this.poll,
   });
   Uint8List groupMsgId;
   Uint8List authorFingerprint;
@@ -181,6 +243,7 @@ class GroupMessage {
   String body;
   Uint8List? replyTo;
   int createdAtSecs;
+  PollInfo? poll;
 }
 
 class GroupDelivery {
@@ -241,8 +304,22 @@ abstract class VlHostApi {
   // Lifecycle and identity.
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   StartupInfo start();
+  /// Internet mailbox (ADR-039): sealed envelopes to upload (mine first),
+  /// confirmation that the mailbox holds them, the tags to fetch, and one
+  /// fetched envelope (true if it was new). The app does the HTTP itself.
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void createIdentity();
+  List<Uint8List> internetOutbox();
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void internetUploaded(List<Uint8List> envelopes);
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  List<Uint8List> internetTags();
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  bool receiveInternet(Uint8List envelope);
+
+  /// Creates this phone's identity, or brings back the one this phone had
+  /// before a reinstall (ADR-038). True when it was restored.
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  bool createIdentity();
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   Uint8List myFingerprint();
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
@@ -374,12 +451,60 @@ abstract class VlHostApi {
   // Bluetooth relay and permissions.
   NetworkStatus networkStatus();
 
+  /// One GPS fix for "Share location" (ADR-034). Asks for location permission
+  /// the first time; null if refused or no fix within about 20 s.
+  @async
+  LocationInfo? currentLocation();
+
+  /// Shares a fix with a contact; returns the message id.
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  Uint8List sendLocation(Uint8List contactId, LocationInfo fix);
+
+  /// Opens the system Maps app at a position (it may need the internet).
+  void openMap(int latE7, int lonE7, String label);
+
+  /// Polls (ADR-035): start one in a chat or a group; returns its id.
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  Uint8List sendPoll(Uint8List contactId, String question, List<String> options, bool multi);
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  Uint8List sendGroupPoll(Uint8List groupId, String question, List<String> options, bool multi);
+
+  /// Introductions (ADR-037).
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  Uint8List introduce(Uint8List contactA, Uint8List contactB);
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void acceptIntro(Uint8List introId, String myName);
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void declineIntro(Uint8List introId);
+
+  /// QR "paper" message (ADR-036): the sealed envelope of one of my
+  /// undelivered messages as `VLM1:` text, and taking a scanned one (returns
+  /// the contact id it came from).
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  String paperMessage(Uint8List messageId);
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  Uint8List receivePaper(String code);
+
+  /// My whole choice for a poll (bit i = option i; 0 withdraws).
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void vote(Uint8List pollId, int choices);
+
+  /// Paired, unblocked contacts seen over Bluetooth in the last `withinSecs`.
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  List<NearbyContact> nearbyContacts(int withinSecs);
+
   /// Starts or stops scanning, advertising and link sessions. The choice is
   /// persisted. On iOS the first start shows the system Bluetooth prompt.
   void setRelayEnabled(bool enabled);
 
   /// Android: 1 = relay only while charging, 2 = always (foreground service).
   void setRelayMode(int mode);
+
+  /// Seconds before syncing with the same nearby phone again (ADR-032): 1 ..= 45, default 5.
+  int resyncSecs();
+
+  /// Stores the interval (clamped to 1 ..= 45) and returns the stored value.
+  int setResyncSecs(int secs);
 
   /// Device biometrics or passcode can be used for the app lock.
   bool canAuthenticate();
@@ -402,6 +527,10 @@ abstract class VlHostApi {
   Contact debugCreatePeer(String name);
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void debugPeerSend(String text);
+
+  /// The peer sends this file as an attachment (real chunking and encryption).
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void debugPeerSendFile(String name, Uint8List data);
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void debugExchange();
 }

@@ -14,3 +14,4 @@ target/
 /app/packages/vl_host/ios/vl_host/Sources/VlCore/vl_ffi.swift
 /app/packages/vl_host/android/src/main/jniLibs/
 /app/packages/vl_host/android/src/main/kotlin/uniffi/
+/core/fuzz/*.log

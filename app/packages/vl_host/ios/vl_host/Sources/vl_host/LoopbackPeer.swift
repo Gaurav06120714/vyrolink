@@ -38,6 +38,11 @@
       _ = try node.sendText(contactId: contactOfMe, text: text, nowSecs: Self.now)
     }
 
+    func sendFile(_ name: String, _ data: Data) throws {
+      _ = try node.sendAttachment(
+        contactId: contactOfMe, kind: 2, name: name, data: data, caption: "", replyTo: nil, nowSecs: Self.now)
+    }
+
     /// One encounter, 185-byte writes, until both sides go quiet.
     func exchange(with me: VlNode) throws {
       let a = try me.linkOpen(initiator: true)

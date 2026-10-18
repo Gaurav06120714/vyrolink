@@ -182,6 +182,56 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (contact_id, attachment_id, idx)
     ) WITHOUT ROWID;
 ",
+    // v7 (2026-10-18): last time each contact was proven nearby (ADR-033).
+    "
+    CREATE TABLE contact_seen (
+        contact_id BLOB PRIMARY KEY REFERENCES contacts(contact_id) ON DELETE CASCADE,
+        last_seen  INTEGER NOT NULL
+    ) WITHOUT ROWID;
+",
+    // v8 (2026-10-18): shared locations (ADR-034) and polls (ADR-035). Polls are
+    // keyed by the message id they show under (a chat message or a group message).
+    "
+    CREATE TABLE locations (
+        message_id  BLOB PRIMARY KEY,
+        lat_e7      INTEGER NOT NULL,
+        lon_e7      INTEGER NOT NULL,
+        accuracy_m  INTEGER NOT NULL,
+        captured_ms INTEGER NOT NULL
+    ) WITHOUT ROWID;
+    CREATE TABLE polls (
+        poll_id  BLOB PRIMARY KEY,
+        question TEXT NOT NULL,
+        options  TEXT NOT NULL,
+        multi    INTEGER NOT NULL
+    ) WITHOUT ROWID;
+    CREATE TABLE poll_votes (
+        poll_id BLOB NOT NULL,
+        voter   BLOB NOT NULL,
+        choices INTEGER NOT NULL,
+        at      INTEGER NOT NULL,
+        PRIMARY KEY (poll_id, voter)
+    ) WITHOUT ROWID;
+",
+    // v9 (2026-10-18): introductions (ADR-037). role 0 = I introduced two
+    // contacts; role 1 = a contact introduced me to someone.
+    "
+    CREATE TABLE intros (
+        intro_id    BLOB PRIMARY KEY,
+        role        INTEGER NOT NULL,
+        introducer  BLOB,
+        other_name  TEXT NOT NULL DEFAULT '',
+        other_fp    BLOB,
+        a_contact   BLOB,
+        b_contact   BLOB,
+        card_a      BLOB,
+        card_b      BLOB,
+        state       INTEGER NOT NULL,
+        message_id  BLOB,
+        created_at  INTEGER NOT NULL
+    ) WITHOUT ROWID;
+    CREATE INDEX intros_message ON intros(message_id);
+",
 ];
 
 /// Partial attachment bytes held per contact (ADR-026); further chunks wait
@@ -324,6 +374,41 @@ impl MessageState {
                 | (Expired | DeliveryUnknown, Queued | Acknowledged)
         )
     }
+}
+
+/// A shared location (ADR-034).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocationRow {
+    pub lat_e7: i32,
+    pub lon_e7: i32,
+    pub accuracy_m: u16,
+    pub captured_ms: u64,
+}
+
+/// A poll's question and options (ADR-035).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollRow {
+    pub question: String,
+    pub options: Vec<String>,
+    pub multi: bool,
+}
+
+/// An introduction (ADR-037). Role 0: I introduced `a_contact` and
+/// `b_contact`; role 1: `introducer` introduced me to `other_name`/`other_fp`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct IntroRow {
+    pub intro_id: [u8; 16],
+    pub role: u8,
+    pub introducer: Option<[u8; 16]>,
+    pub other_name: String,
+    pub other_fp: Option<[u8; 32]>,
+    pub a_contact: Option<[u8; 16]>,
+    pub b_contact: Option<[u8; 16]>,
+    pub card_a: Option<Vec<u8>>,
+    pub card_b: Option<Vec<u8>>,
+    pub state: u8,
+    pub message_id: Option<[u8; 16]>,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -931,6 +1016,228 @@ impl ConversationDb {
         .collect()
     }
 
+    pub fn put_location(&mut self, message_id: &[u8; 16], l: &LocationRow) -> Result<(), DbError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO locations (message_id, lat_e7, lon_e7, accuracy_m, captured_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                message_id,
+                l.lat_e7,
+                l.lon_e7,
+                l.accuracy_m,
+                i64::try_from(l.captured_ms).unwrap_or(i64::MAX)
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn location(&self, message_id: &[u8; 16]) -> Result<Option<LocationRow>, DbError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT lat_e7, lon_e7, accuracy_m, captured_ms FROM locations WHERE message_id = ?1",
+                [message_id],
+                |r| {
+                    Ok(LocationRow {
+                        lat_e7: r.get(0)?,
+                        lon_e7: r.get(1)?,
+                        accuracy_m: r.get(2)?,
+                        captured_ms: u64::try_from(r.get::<_, i64>(3)?).unwrap_or(0),
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Options are stored newline-separated; the protocol forbids empty ones
+    /// and the core strips newlines from them before sending.
+    pub fn put_poll(&mut self, poll_id: &[u8; 16], p: &PollRow) -> Result<(), DbError> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO polls (poll_id, question, options, multi) VALUES (?1, ?2, ?3, ?4)",
+            params![poll_id, p.question, p.options.join("\n"), p.multi],
+        )?;
+        Ok(())
+    }
+
+    pub fn poll(&self, poll_id: &[u8; 16]) -> Result<Option<PollRow>, DbError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT question, options, multi FROM polls WHERE poll_id = ?1",
+                [poll_id],
+                |r| {
+                    Ok(PollRow {
+                        question: r.get(0)?,
+                        options: r
+                            .get::<_, String>(1)?
+                            .split('\n')
+                            .map(String::from)
+                            .collect(),
+                        multi: r.get(2)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// A voter's whole current choice; 0 withdraws the vote.
+    pub fn set_vote(
+        &mut self,
+        poll_id: &[u8; 16],
+        voter: &[u8; 32],
+        choices: u16,
+        at: i64,
+    ) -> Result<(), DbError> {
+        if choices == 0 {
+            self.conn.execute(
+                "DELETE FROM poll_votes WHERE poll_id = ?1 AND voter = ?2",
+                params![poll_id, voter],
+            )?;
+        } else {
+            self.conn.execute(
+                "INSERT INTO poll_votes (poll_id, voter, choices, at) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT (poll_id, voter) DO UPDATE SET choices = excluded.choices, at = excluded.at",
+                params![poll_id, voter, choices, at],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Every voter's current choice for a poll.
+    pub fn votes(&self, poll_id: &[u8; 16]) -> Result<Vec<([u8; 32], u16)>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT voter, choices FROM poll_votes WHERE poll_id = ?1")?;
+        let rows = stmt.query_map([poll_id], |r| {
+            Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, u16>(1)?))
+        })?;
+        rows.map(|r| {
+            let (v, c) = r?;
+            let voter: [u8; 32] = v
+                .as_slice()
+                .try_into()
+                .map_err(|_| DbError::Corrupt("voter"))?;
+            Ok((voter, c))
+        })
+        .collect()
+    }
+
+    pub fn put_intro(&mut self, i: &IntroRow) -> Result<(), DbError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO intros (intro_id, role, introducer, other_name, other_fp, a_contact,
+                 b_contact, card_a, card_b, state, message_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                i.intro_id, i.role, i.introducer, i.other_name, i.other_fp, i.a_contact, i.b_contact,
+                i.card_a, i.card_b, i.state, i.message_id, i.created_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn intro_where(&self, clause: &str, key: &[u8]) -> Result<Option<IntroRow>, DbError> {
+        let sql = format!(
+            "SELECT intro_id, role, introducer, other_name, other_fp, a_contact, b_contact, card_a, card_b,
+                 state, message_id, created_at FROM intros WHERE {clause} = ?1 LIMIT 1"
+        );
+        let row = self
+            .conn
+            .query_row(&sql, [key], |r| {
+                Ok((
+                    r.get::<_, Vec<u8>>(0)?,
+                    r.get::<_, u8>(1)?,
+                    r.get::<_, Option<Vec<u8>>>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, Option<Vec<u8>>>(4)?,
+                    r.get::<_, Option<Vec<u8>>>(5)?,
+                    r.get::<_, Option<Vec<u8>>>(6)?,
+                    r.get::<_, Option<Vec<u8>>>(7)?,
+                    r.get::<_, Option<Vec<u8>>>(8)?,
+                    r.get::<_, u8>(9)?,
+                    r.get::<_, Option<Vec<u8>>>(10)?,
+                    r.get::<_, i64>(11)?,
+                ))
+            })
+            .optional()?;
+        row.map(
+            |(
+                id,
+                role,
+                introducer,
+                other_name,
+                fp,
+                a,
+                b,
+                card_a,
+                card_b,
+                state,
+                mid,
+                created_at,
+            )| {
+                Ok(IntroRow {
+                    intro_id: blob16(&id)?,
+                    role,
+                    introducer: opt16(introducer)?,
+                    other_name,
+                    other_fp: fp.map(|v| blob32(&v)).transpose()?,
+                    a_contact: opt16(a)?,
+                    b_contact: opt16(b)?,
+                    card_a,
+                    card_b,
+                    state,
+                    message_id: opt16(mid)?,
+                    created_at,
+                })
+            },
+        )
+        .transpose()
+    }
+
+    pub fn intro(&self, intro_id: &[u8; 16]) -> Result<Option<IntroRow>, DbError> {
+        self.intro_where("intro_id", intro_id)
+    }
+
+    pub fn intro_by_message(&self, message_id: &[u8; 16]) -> Result<Option<IntroRow>, DbError> {
+        self.intro_where("message_id", message_id)
+    }
+
+    /// Who introduced me to this identity, if a completed introduction did.
+    pub fn introducer_of(&self, fp: &[u8; 32]) -> Result<Option<[u8; 16]>, DbError> {
+        let v: Option<Option<Vec<u8>>> = self
+            .conn
+            .query_row(
+                "SELECT introducer FROM intros WHERE role = 1 AND state = 3 AND other_fp = ?1 LIMIT 1",
+                [fp],
+                |r| r.get(0),
+            )
+            .optional()?;
+        v.flatten().map(|b| blob16(&b)).transpose()
+    }
+
+    /// Records that a link proved `contact_id` was in Bluetooth range at `at`
+    /// (ADR-033). One timestamp per contact; never a history of meetings.
+    pub fn touch_seen(&mut self, contact_id: &[u8; 16], at: i64) -> Result<(), DbError> {
+        self.conn.execute(
+            "INSERT INTO contact_seen (contact_id, last_seen) VALUES (?1, ?2)
+             ON CONFLICT (contact_id) DO UPDATE SET last_seen = max(last_seen, excluded.last_seen)",
+            params![contact_id, at],
+        )?;
+        Ok(())
+    }
+
+    /// Last time each contact was proven nearby.
+    pub fn last_seen_all(&self) -> Result<std::collections::HashMap<[u8; 16], i64>, DbError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT contact_id, last_seen FROM contact_seen")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, i64>(1)?)))?;
+        rows.map(|r| {
+            let (id, at) = r?;
+            Ok((blob16(&id)?, at))
+        })
+        .collect()
+    }
+
     /// Local app settings, kept in this encrypted database. `None` removes the key.
     pub fn set_setting(&mut self, key: &str, value: Option<&str>) -> Result<(), DbError> {
         match value {
@@ -1393,6 +1700,19 @@ impl ConversationDb {
     }
 
     /// Newest first.
+    /// The group a group message belongs to, if it is stored here.
+    pub fn group_of_message(&self, group_msg_id: &[u8; 16]) -> Result<Option<[u8; 16]>, DbError> {
+        let id: Option<Vec<u8>> = self
+            .conn
+            .query_row(
+                "SELECT group_id FROM group_messages WHERE group_msg_id = ?1",
+                [group_msg_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        id.map(|v| blob16(&v)).transpose()
+    }
+
     pub fn group_messages(
         &self,
         group_id: &[u8; 16],
@@ -1691,6 +2011,9 @@ fn reindex(tx: &rusqlite::Transaction<'_>, message_id: &[u8; 16]) -> Result<(), 
 }
 
 fn purge_annotations(tx: &rusqlite::Transaction<'_>, message_id: &[u8; 16]) -> Result<(), DbError> {
+    tx.execute("DELETE FROM locations WHERE message_id = ?1", [message_id])?;
+    tx.execute("DELETE FROM polls WHERE poll_id = ?1", [message_id])?;
+    tx.execute("DELETE FROM poll_votes WHERE poll_id = ?1", [message_id])?;
     tx.execute(
         "DELETE FROM attachment_chunks WHERE (contact_id, attachment_id) IN
              (SELECT contact_id, attachment_id FROM attachments WHERE message_id = ?1)",

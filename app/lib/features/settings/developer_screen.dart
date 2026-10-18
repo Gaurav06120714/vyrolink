@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../../app/failure.dart';
@@ -94,6 +97,20 @@ class _DeveloperScreenState extends State<DeveloperScreen> {
                 OutlinedButton(
                   onPressed: () => _do(() => s.call((api) => api.debugPeerSend(_text.text)), 'Queued on the peer'),
                   child: const Text('Peer sends'),
+                ),
+                const SizedBox(height: Space.s),
+                OutlinedButton(
+                  // ~13 KB, so it travels as about 10 encrypted parts (ADR-026).
+                  onPressed: () => _do(
+                    () => s.call(
+                      (api) => api.debugPeerSendFile(
+                        'trail-notes.txt',
+                        Uint8List.fromList(utf8.encode(List.filled(400, 'North gate at six. Bring the map.\n').join())),
+                      ),
+                    ),
+                    'File queued on the peer',
+                  ),
+                  child: const Text('Peer sends a file'),
                 ),
               ],
             ),

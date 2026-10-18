@@ -10,9 +10,9 @@ mod relay;
 
 pub use conversation::{
     AttachmentRow, Contact, ConversationDb, DELETE_WINDOW_MS, EDIT_WINDOW_MS, EventMeta,
-    GroupApply, GroupMessageRow, GroupRow, MAX_GROUP_PENDING_PER_CONTACT, MAX_ORPHANS_PER_CONTACT,
-    MAX_PARTIAL_ATTACHMENT_BYTES, MessageRow, MessageState, ORPHAN_TTL_SECS, PendingGroupMessage,
-    Reaction,
+    GroupApply, GroupMessageRow, GroupRow, IntroRow, LocationRow, MAX_GROUP_PENDING_PER_CONTACT,
+    MAX_ORPHANS_PER_CONTACT, MAX_PARTIAL_ATTACHMENT_BYTES, MessageRow, MessageState,
+    ORPHAN_TTL_SECS, PendingGroupMessage, PollRow, Reaction,
 };
 pub use relay::RelayDb;
 

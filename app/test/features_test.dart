@@ -4,8 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vl_host/vl_host.dart';
+import 'package:vyro_link/app/services.dart';
+import 'package:vyro_link/design/widgets/nearby.dart';
 import 'package:vyro_link/features/contacts/contact_screen.dart';
 import 'package:vyro_link/features/conversation/attachment_view.dart';
+import 'package:vyro_link/features/conversation/share_view.dart';
 import 'package:vyro_link/features/conversation/conversation_screen.dart';
 import 'package:vyro_link/features/network/network_screen.dart';
 import 'package:vyro_link/features/settings/my_id_screen.dart';
@@ -69,6 +72,181 @@ void main() {
     expect(text, contains('Phones met in last day: 3–9'));
     expect(text, isNot(contains(FakeHost.myCode)));
     expect(utf8.encode(text).length, lessThan(1024));
+  });
+
+  test('distance and direction are computed on the phone', () {
+    // About 1.1 km due north, then about 1.1 km due east (near the equator).
+    expect(distanceMetres(0, 0, 100000, 0), closeTo(1112, 2));
+    expect(compassPoint(bearingDegrees(0, 0, 100000, 0)), 'N');
+    expect(compassPoint(bearingDegrees(0, 0, 0, 100000)), 'E');
+    expect(compassPoint(bearingDegrees(0, 0, -100000, -100000)), 'SW');
+    expect(formatDistance(850), '850 m');
+    expect(formatDistance(2340), '2.3 km');
+  });
+
+  testWidgets('a poll shows counts and a tap sends my whole new choice', (t) async {
+    final host = FakeHost();
+    final poll = PollInfo(
+      question: 'Start time?',
+      options: ['7:00', '8:00'],
+      multi: false,
+      counts: [2, 1],
+      mine: 2, // 8:00
+      voters: 3,
+    );
+    await t.pumpWidget(
+      harness(
+        host,
+        Scaffold(
+          body: PollCard(pollId: id(9), poll: poll, onBubble: false),
+        ),
+      ),
+    );
+    await settle(t);
+    expect(find.text('Start time?'), findsOneWidget);
+    expect(find.text('Choose one · 3 votes'), findsOneWidget);
+    await t.tap(find.text('7:00'));
+    await settle(t);
+    // Single choice: picking 7:00 replaces my 8:00 vote.
+    expect(host.votes.single, (idKey(id(9)), 1));
+  });
+
+  testWidgets('a location card shows coordinates and accuracy', (t) async {
+    final info = LocationInfo(latE7: 174_123_456, lonE7: 785_654_321, accuracyM: 9, capturedMs: 0);
+    await t.pumpWidget(
+      harness(
+        FakeHost(),
+        Scaffold(
+          body: LocationCard(info: info, onBubble: false, label: 'Asha'),
+        ),
+      ),
+    );
+    await settle(t);
+    expect(find.textContaining('17.41235, 78.56543 · ±9 m'), findsOneWidget);
+    expect(find.text('Distance from me'), findsOneWidget);
+    expect(find.text('Open in Maps'), findsOneWidget);
+  });
+
+  testWidgets('an introduction can be accepted and then shows its progress', (t) async {
+    final host = FakeHost();
+    Widget card(int state) => harness(
+      host,
+      Scaffold(
+        body: IntroCard(
+          body: 'Asha wants to introduce you to Ravi',
+          intro: IntroInfo(introId: id(4), otherName: 'Ravi', state: state),
+          onBubble: false,
+        ),
+      ),
+    );
+    await t.pumpWidget(card(0));
+    await settle(t);
+    t.element(find.byType(IntroCard)).services.profileName = 'Bala';
+    await t.tap(find.text('Accept'));
+    await settle(t);
+    expect(host.accepted.single, (idKey(id(4)), 'Bala'));
+    await t.pumpWidget(card(3));
+    await settle(t);
+    expect(find.textContaining('You can now message Ravi'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+  });
+
+  testWidgets('an introduced contact says who introduced them', (t) async {
+    final c = contact(1, 'Ravi')..introducedBy = 'Asha';
+    final host = FakeHost()..contactsList.add(c);
+    await t.pumpWidget(harness(host, ContactScreen(contactId: id(1))));
+    await settle(t);
+    expect(find.text('Introduced by Asha, not met in person'), findsOneWidget);
+  });
+
+  test('seen-ago wording', () {
+    final now = DateTime.utc(2026, 10, 16, 12);
+    final secs = now.millisecondsSinceEpoch ~/ 1000;
+    expect(seenAgo(secs - 20, now: now), 'just now');
+    expect(seenAgo(secs - 4 * 60, now: now), '4 min ago');
+    expect(seenAgo(secs - 3 * 3600, now: now), '3 h ago');
+    expect(seenAgo(secs - 3 * 86400, now: now), '3 days ago');
+  });
+
+  testWidgets('a contact not near now shows when it was last seen nearby', (t) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final c = contact(1, 'Asha')..lastSeenSecs = now - 3 * 3600;
+    final host = FakeHost()..contactsList.add(c);
+    await t.pumpWidget(harness(host, ContactScreen(contactId: id(1))));
+    await settle(t);
+    expect(find.text('Last seen nearby 3 h ago'), findsOneWidget);
+  });
+
+  testWidgets('a paired contact shows Nearby only while the host reports them', (t) async {
+    final host = FakeHost()..contactsList.add(contact(1, 'Asha'));
+    await t.pumpWidget(harness(host, ContactScreen(contactId: id(1))));
+    await settle(t);
+    final services = t.element(find.byType(ContactScreen)).services;
+    expect(find.textContaining('Nearby'), findsNothing);
+
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    host.nearby.add(NearbyContact(contactId: id(1), seenSecs: now - 120));
+    await services.refreshNetwork();
+    await settle(t);
+    expect(find.text('Nearby · seen 2 min ago'), findsOneWidget);
+
+    host.nearby.clear();
+    await services.refreshNetwork();
+    await settle(t);
+    expect(find.textContaining('Nearby'), findsNothing);
+  });
+
+  testWidgets('renaming a contact closes the dialog cleanly and shows the new name', (t) async {
+    final host = FakeHost()..contactsList.add(contact(1, 'Asha'));
+    await t.pumpWidget(harness(host, ContactScreen(contactId: id(1))));
+    await settle(t);
+    await t.scrollUntilVisible(find.text('Rename'), 200, scrollable: find.byType(Scrollable).first);
+    await t.tap(find.text('Rename'));
+    await t.pumpAndSettle();
+    await t.enterText(find.byType(TextField).last, 'Trail buddy');
+    await t.tap(find.text('Save'));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(host.contactsList.single.displayName, 'Trail buddy');
+    await t.scrollUntilVisible(find.text('Trail buddy'), -200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Trail buddy'), findsWidgets);
+  });
+
+  testWidgets('an edited message still opens its actions on long-press', (t) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final host = FakeHost()
+      ..contactsList.add(contact(1, 'Asha'))
+      ..messages.add(message(5, 1, 'Meet at six', at: now, edited: true));
+    await t.pumpWidget(harness(host, ConversationScreen(contactId: id(1), initialName: 'Asha')));
+    await settle(t);
+    expect(find.textContaining('Edited'), findsOneWidget);
+    await t.longPress(find.text('Meet at six'));
+    await settle(t);
+    expect(find.text('Pin'), findsOneWidget);
+    expect(find.text('Star'), findsOneWidget);
+  });
+
+  testWidgets('poll answers inside a chat bubble are reachable by screen readers', (t) async {
+    // Found on the Samsung on 2026-10-18: the bubble hid its card's buttons.
+    final handle = t.ensureSemantics();
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final host = FakeHost()
+      ..contactsList.add(contact(1, 'Asha'))
+      ..messages.add(
+        message(5, 1, 'Lunch where', at: now)
+          ..poll = PollInfo(
+            question: 'Lunch where',
+            options: ['Canteen', 'Cafe'],
+            multi: false,
+            counts: [0, 0],
+            mine: 0,
+            voters: 0,
+          ),
+      );
+    await t.pumpWidget(harness(host, ConversationScreen(contactId: id(1), initialName: 'Asha')));
+    await settle(t);
+    expect(find.bySemanticsLabel(RegExp('Canteen')), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('My ID shows the 32-character code in groups', (t) async {

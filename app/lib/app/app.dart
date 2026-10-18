@@ -46,11 +46,24 @@ class _RootGateState extends State<RootGate> {
   _Phase _phase = _Phase.starting;
   VlFailure? _failure;
 
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
     context.services.restartApp = _start;
+    // The internet mailbox runs only while the app is in use.
+    _lifecycle = AppLifecycleListener(
+      onResume: () => context.services.applyInternet().ignore(),
+      onHide: () => context.services.internet.stop(),
+    );
     _start();
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
   }
 
   Future<void> _start() async {
@@ -63,6 +76,7 @@ class _RootGateState extends State<RootGate> {
       final capture = s.startup.hasIdentity ? await s.call((api) => api.setting(AppServices.screenCaptureKey)) : null;
       if (capture != null) await s.call((api) => api.setScreenCaptureBlocked(capture == '1'));
       await s.refreshNetwork();
+      await s.applyInternet();
       s.bump();
       setState(() => _phase = s.startup.hasIdentity ? _Phase.ready : _Phase.onboarding);
     } on VlFailure catch (e) {
@@ -117,7 +131,7 @@ class _StartFailure extends StatelessWidget {
     );
     if (ok != true || !context.mounted) return;
     try {
-      await context.services.call((api) => api.panicWipe());
+      await context.services.panicWipe();
       onRetry();
     } on VlFailure catch (e) {
       if (context.mounted) showMessage(context, e.message);

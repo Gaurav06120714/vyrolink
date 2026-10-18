@@ -1,0 +1,26 @@
+# Render Blueprint: the VYRO LINK internet mailbox (ADR-039) and its database.
+# Render → New → Blueprint → pick this repository. Use the internal database
+# URL (same region, no TLS needed). The mailbox stores only sealed envelopes.
+databases:
+  - name: vyrolink-mailbox-db
+    plan: free
+    databaseName: mailbox
+    ipAllowList: []
+
+services:
+  - type: web
+    name: vyrolink-mailbox
+    runtime: docker
+    plan: free
+    dockerContext: ./core
+    dockerfilePath: ./core/crates/vl-mailbox/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vyrolink-mailbox-db
+          property: connectionString
+      - key: TRUST_PROXY
+        value: "1"
+      - key: WEB_ORIGIN
+        sync: false

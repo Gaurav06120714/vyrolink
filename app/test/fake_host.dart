@@ -1,6 +1,7 @@
 // Test double for the native host. Used only by widget tests; the real app
 // always talks to the Rust core through VlHostApi.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,7 @@ Message message(
   DeliveryState state = DeliveryState.queued,
   int at = 1790000000,
   bool deleted = false,
+  bool edited = false,
 }) => Message(
   messageId: id(n),
   contactId: id(contactN),
@@ -37,7 +39,7 @@ Message message(
   state: outgoing ? state : DeliveryState.received,
   forwarded: false,
   deleted: deleted,
-  edited: false,
+  edited: edited,
   pinned: false,
   starred: false,
 );
@@ -68,11 +70,37 @@ class FakeHost extends Fake implements VlHostApi {
     reactions: const ['👍', '👎', '😀', '😂', '😢', '❤️', '🚀', '✅'],
   );
 
+  bool restoreIdentity = false;
+
+  /// Internet mailbox (ADR-039).
+  final outbox = <Uint8List>[];
+  final uploaded = <Uint8List>[];
+  final received = <Uint8List>[];
+
   @override
-  Future<void> createIdentity() async {
+  Future<List<Uint8List>> internetOutbox() async => List.of(outbox);
+
+  @override
+  Future<void> internetUploaded(List<Uint8List> envelopes) async {
+    uploaded.addAll(envelopes);
+    outbox.removeWhere((e) => envelopes.any((u) => listEquals(u, e)));
+  }
+
+  @override
+  Future<List<Uint8List>> internetTags() async => [id(7)];
+
+  @override
+  Future<bool> receiveInternet(Uint8List envelope) async {
+    received.add(envelope);
+    return true;
+  }
+
+  @override
+  Future<bool> createIdentity() async {
     calls.add('createIdentity');
     _maybeFail();
     hasIdentity = true;
+    return restoreIdentity;
   }
 
   @override
@@ -105,6 +133,39 @@ class FakeHost extends Fake implements VlHostApi {
 
   @override
   Future<List<Contact>> contacts() async => contactsList;
+
+  @override
+  Future<void> renameContact(Uint8List contactId, String name) async {
+    final i = contactsList.indexWhere((c) => _same(c.contactId, contactId));
+    final c = contactsList[i];
+    contactsList[i] = Contact(
+      contactId: c.contactId,
+      displayName: name,
+      fingerprint: c.fingerprint,
+      idCode: c.idCode,
+      verified: c.verified,
+      blocked: c.blocked,
+      safetyNumber: c.safetyNumber,
+    );
+  }
+
+  final accepted = <(String, String)>[];
+  @override
+  Future<void> acceptIntro(Uint8List introId, String myName) async => accepted.add((idKey(introId), myName));
+
+  final votes = <(String, int)>[];
+  @override
+  Future<void> vote(Uint8List pollId, int choices) async => votes.add((idKey(pollId), choices));
+
+  int resync = 5;
+  @override
+  Future<int> resyncSecs() async => resync;
+  @override
+  Future<int> setResyncSecs(int secs) async => resync = secs.clamp(1, 45);
+
+  final nearby = <NearbyContact>[];
+  @override
+  Future<List<NearbyContact>> nearbyContacts(int withinSecs) async => nearby;
 
   @override
   Future<List<ConversationSummary>> conversationSummaries() async => [

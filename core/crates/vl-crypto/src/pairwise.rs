@@ -40,25 +40,27 @@ impl fmt::Debug for PairKeys {
 }
 
 impl PairKeys {
-    /// `K_pair = HKDF-Extract(SHA-256(min(Ha,Hb) ‖ max(Ha,Hb)), X25519(ak_self, ak_peer))`;
-    /// each directional key is `HKDF-Expand(K_pair, label ‖ H_sender ‖ H_recipient)`.
+    /// `K_pair = HKDF-Extract(SHA-256(min(Fa,Fb) ‖ max(Fa,Fb)), X25519(ak_self, ak_peer))`;
+    /// each directional key is `HKDF-Expand(K_pair, label ‖ F_sender ‖ F_recipient)`.
+    /// `F` is each side's Ed25519 identity (fingerprint) key, taken from the
+    /// signed cards (ADR-031); it is the same for every card a phone shows.
     pub fn derive(
         my_addressing: &StaticSecret,
-        my_card_hash: &[u8; 32],
+        my_id: &[u8; 32],
         their_addressing_pub: &[u8; 32],
-        their_card_hash: &[u8; 32],
+        their_id: &[u8; 32],
     ) -> Result<Self, CryptoError> {
-        if my_card_hash == their_card_hash {
+        if my_id == their_id {
             return Err(CryptoError::InvalidKey);
         }
         let shared = my_addressing.diffie_hellman(&PublicKey::from(*their_addressing_pub));
         if !shared.was_contributory() {
             return Err(CryptoError::NonContributory);
         }
-        let (lo, hi) = if my_card_hash < their_card_hash {
-            (my_card_hash, their_card_hash)
+        let (lo, hi) = if my_id < their_id {
+            (my_id, their_id)
         } else {
-            (their_card_hash, my_card_hash)
+            (their_id, my_id)
         };
         let salt = Sha256::new().chain_update(lo).chain_update(hi).finalize();
         let hk = Hkdf::<Sha256>::new(Some(salt.as_slice()), shared.as_bytes());
@@ -74,10 +76,10 @@ impl PairKeys {
                 Ok(okm)
             };
         Ok(Self {
-            tag_out: expand(b"VL/v1/tag", my_card_hash, their_card_hash)?,
-            tag_in: expand(b"VL/v1/tag", their_card_hash, my_card_hash)?,
-            wrap_out: expand(b"VL/v1/wrap", my_card_hash, their_card_hash)?,
-            wrap_in: expand(b"VL/v1/wrap", their_card_hash, my_card_hash)?,
+            tag_out: expand(b"VL/v1/tag", my_id, their_id)?,
+            tag_in: expand(b"VL/v1/tag", their_id, my_id)?,
+            wrap_out: expand(b"VL/v1/wrap", my_id, their_id)?,
+            wrap_in: expand(b"VL/v1/wrap", their_id, my_id)?,
         })
     }
 
@@ -87,6 +89,18 @@ impl PairKeys {
 
     pub fn tag_in(&self, epoch: u32) -> [u8; 16] {
         tag(&self.tag_in, epoch)
+    }
+
+    /// Presence tag this device shows the contact on one link (ADR-029):
+    /// `Trunc16(HMAC(tag_out, "VL/presence/v1" ‖ h))`, where `h` is the link's
+    /// Noise handshake hash. Fresh per link, so strangers can't link sightings.
+    pub fn presence_out(&self, handshake_hash: &[u8; 32]) -> [u8; 16] {
+        presence(&self.tag_out, handshake_hash)
+    }
+
+    /// The tag the contact would show this device on the same link.
+    pub fn presence_in(&self, handshake_hash: &[u8; 32]) -> [u8; 16] {
+        presence(&self.tag_in, handshake_hash)
     }
 
     pub fn wrap_out(&self) -> &[u8; 32] {
@@ -132,6 +146,14 @@ fn tag(key: &[u8; 32], epoch: u32) -> [u8; 16] {
         .unwrap_or_else(|_| unreachable!("HMAC accepts any key length"));
     mac.update(b"VL/tag/v1");
     mac.update(&epoch.to_be_bytes());
+    truncate16(&mac.finalize().into_bytes())
+}
+
+fn presence(key: &[u8; 32], handshake_hash: &[u8; 32]) -> [u8; 16] {
+    let mut mac = <Hmac<Sha256> as hmac::KeyInit>::new_from_slice(key)
+        .unwrap_or_else(|_| unreachable!("HMAC accepts any key length"));
+    mac.update(b"VL/presence/v1");
+    mac.update(handshake_hash);
     truncate16(&mac.finalize().into_bytes())
 }
 
@@ -307,6 +329,27 @@ mod tests {
         assert_ne!(a.tag_out(7), a.tag_in(7));
         assert_ne!(a.tag_out(7), a.tag_out(8));
         assert_eq!(PairKeys::from_bytes(&a.to_bytes()), a);
+    }
+
+    #[test]
+    fn presence_tags_are_mirrored_directional_and_bound_to_the_link() {
+        let (a_sk, a_pk) = keypair(1);
+        let (b_sk, b_pk) = keypair(2);
+        let (ha, hb) = ([0xA; 32], [0xB; 32]);
+        let a = PairKeys::derive(&a_sk, &ha, &b_pk, &hb).unwrap();
+        let b = PairKeys::derive(&b_sk, &hb, &a_pk, &ha).unwrap();
+        let (h1, h2) = ([1; 32], [2; 32]);
+        // Bob recognises the tag Alice shows him, and vice versa.
+        assert_eq!(a.presence_out(&h1), b.presence_in(&h1));
+        assert_eq!(b.presence_out(&h1), a.presence_in(&h1));
+        // Directional: a tag can't be reflected back as the other side's.
+        assert_ne!(a.presence_out(&h1), a.presence_in(&h1));
+        // A new link gives unrelated tags, so sightings can't be linked.
+        assert_ne!(a.presence_out(&h1), a.presence_out(&h2));
+        // Known answer: Trunc16(HMAC-SHA256(key, "VL/presence/v1" ‖ h)), checked with Python's hmac.
+        let kat = super::presence(&[1; 32], &[2; 32]);
+        let hex: String = kat.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(hex, "a5f20529d719aeabb9b1e2cb34e8e420");
     }
 
     #[test]

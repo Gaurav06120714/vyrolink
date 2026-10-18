@@ -18,7 +18,7 @@ log_lines() {
   xcrun simctl spawn "$SIM" log show --start "$START" --style compact \
     --predicate 'process == "Runner" AND eventMessage CONTAINS "flutter:"' 2>/dev/null || true
 }
-for i in $(seq -w 1 120); do
+for i in $(seq -w 1 300); do
   xcrun simctl io "$SIM" screenshot "$OUT/frame-$i.png" >/dev/null 2>&1 || true
   if log_lines | grep -qE "All tests passed|Some tests failed"; then break; fi
   sleep 2

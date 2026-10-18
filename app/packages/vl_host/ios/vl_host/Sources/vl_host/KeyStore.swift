@@ -45,9 +45,43 @@ enum KeyStore {
     SecItemCopyMatching(query(slot) as CFDictionary, nil) == errSecSuccess
   }
 
-  /// Deletes both keys and confirms they are gone. This is the step that makes
-  /// the encrypted databases unrecoverable (cryptographic erasure).
+  // MARK: Identity backup (ADR-038)
+
+  /// The long-term identity keys, so a reinstall on this phone keeps the same
+  /// ID. Keychain items outlive an uninstall; ThisDeviceOnly keeps it off
+  /// iCloud Keychain and out of backups to other phones.
+  private static let backupQuery: [String: Any] = [
+    kSecClass as String: kSecClassGenericPassword,
+    kSecAttrService as String: "com.vyrolink.identity",
+    kSecAttrAccount as String: "backup",
+  ]
+
+  static func identityBackup() -> Data? {
+    var q = backupQuery
+    q[kSecReturnData as String] = true
+    q[kSecMatchLimit as String] = kSecMatchLimitOne
+    var item: CFTypeRef?
+    return SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess ? item as? Data : nil
+  }
+
+  static func saveIdentityBackup(_ data: Data) throws {
+    if identityBackup() == data { return }
+    SecItemDelete(backupQuery as CFDictionary)
+    var add = backupQuery
+    add[kSecValueData as String] = data
+    add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    let added = SecItemAdd(add as CFDictionary, nil)
+    guard added == errSecSuccess else { throw Failure(status: added, action: "store identity") }
+  }
+
+  /// Deletes both keys and the identity backup and confirms they are gone. This
+  /// is the step that makes the encrypted databases unrecoverable
+  /// (cryptographic erasure) and stops a reinstall from bringing the ID back.
   static func destroyAll() throws {
+    let status = SecItemDelete(backupQuery as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound, identityBackup() == nil else {
+      throw Failure(status: status, action: "delete identity")
+    }
     for slot in Slot.allCases {
       let status = SecItemDelete(query(slot) as CFDictionary)
       guard status == errSecSuccess || status == errSecItemNotFound else {

@@ -1,8 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Offline by design (NFR-02): drop the network-state permission a CameraX
-         dependency (media3-common) brings in. INTERNET exists only in the
-         Flutter debug/profile manifests for hot reload. -->
+    <!-- Messaging works offline (NFR-02). INTERNET is used only by the optional
+         Google sign-in (ADR-030) and the optional internet mailbox, off by
+         default (ADR-039). The network-state permission a CameraX dependency
+         (media3-common) brings in is still dropped. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
     <application
         android:label="VYRO LINK"

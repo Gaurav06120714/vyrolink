@@ -15,6 +15,13 @@ pub struct Device {
 }
 
 pub fn device(name: &str) -> Device {
+    let mut d = blank_device(name);
+    d.node.create_identity(T0).unwrap();
+    d
+}
+
+/// A freshly installed app: databases but no identity yet.
+pub fn blank_device(name: &str) -> Device {
     static N: AtomicUsize = AtomicUsize::new(0);
     let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "vl-e2e-{}-{}-{name}",
@@ -31,9 +38,10 @@ pub fn device(name: &str) -> Device {
         conversation_key: [2; 32],
         policy: Policy::default_spray(),
     };
-    let mut node = Node::open(&cfg).unwrap();
-    node.create_identity(T0).unwrap();
-    Device { node, dir }
+    Device {
+        node: Node::open(&cfg).unwrap(),
+        dir,
+    }
 }
 
 pub fn reopen(d: Device) -> Device {

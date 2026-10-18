@@ -381,6 +381,7 @@ fn incompatible_peer_is_closed() {
         relay_willing: true,
         free_capacity_bucket: 0,
         l2cap_psm: None,
+        features: 0,
     };
     let (out, ev) = s.handle(LinkMessage::Hello(hello), &mut node.store, NOW);
     assert_eq!(out, vec![LinkMessage::Bye(1)]);

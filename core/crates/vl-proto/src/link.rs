@@ -15,6 +15,13 @@ pub const MAX_FRAME_LEN: usize = if MAX_SUMMARY_LEN > MAX_ENVELOPE_MSG_LEN {
 };
 const MAX_LINK_VERSIONS: usize = 8;
 const MAX_TLV_BYTES: usize = 256;
+/// HELLO extension carrying optional-feature bits (ADR-029). Older peers skip it.
+const TLV_FEATURES: u8 = 0x01;
+/// Feature bit: the peer understands PRESENCE (ADR-029).
+pub const FEATURE_PRESENCE: u8 = 0b0000_0001;
+/// Presence tags are padded with random values to a multiple of this, so a
+/// peer learns only a coarse contact count.
+pub const PRESENCE_PAD: usize = 16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RelayClass {
@@ -32,6 +39,8 @@ pub struct Hello {
     /// Coarse free carry capacity, 0 (none) ..= 255 (plenty). Never an exact byte count.
     pub free_capacity_bucket: u8,
     pub l2cap_psm: Option<u16>,
+    /// Optional-feature bits ([`FEATURE_PRESENCE`]); sent as a HELLO extension.
+    pub features: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,6 +102,9 @@ pub enum LinkMessage {
     Ping(u32),
     Pong(u32),
     Bye(u8),
+    /// Contact-presence tags bound to this link (ADR-029). Sent only to peers
+    /// whose HELLO set [`FEATURE_PRESENCE`].
+    Presence(Vec<[u8; 16]>),
 }
 
 const T_HELLO: u8 = 0x01;
@@ -104,6 +116,7 @@ const T_VACCINE: u8 = 0x06;
 const T_PING: u8 = 0x07;
 const T_PONG: u8 = 0x08;
 const T_BYE: u8 = 0x09;
+const T_PRESENCE: u8 = 0x0A;
 
 const HELLO_FLAG_RELAY: u8 = 0b01;
 const HELLO_FLAG_L2CAP: u8 = 0b10;
@@ -146,6 +159,9 @@ impl LinkMessage {
                 w.push(flags);
                 w.push(h.free_capacity_bucket);
                 w.extend_from_slice(&h.l2cap_psm.unwrap_or(0).to_be_bytes());
+                if h.features != 0 {
+                    w.extend_from_slice(&[TLV_FEATURES, 1, h.features]);
+                }
             }
             Self::Summary { entries, delivered } => {
                 w.push(T_SUMMARY);
@@ -202,6 +218,13 @@ impl LinkMessage {
                 w.push(T_BYE);
                 w.push(*reason);
             }
+            Self::Presence(tags) => {
+                w.push(T_PRESENCE);
+                w.extend_from_slice(&checked_count(tags.len())?.to_be_bytes());
+                for t in tags {
+                    w.extend_from_slice(t);
+                }
+            }
         }
         Ok(w)
     }
@@ -231,7 +254,7 @@ impl LinkMessage {
                 }
                 let free_capacity_bucket = r.u8()?;
                 let psm = r.u16()?;
-                skip_tlvs(&mut r)?;
+                let features = read_tlvs(&mut r)?;
                 return Ok(Self::Hello(Hello {
                     link_versions,
                     max_frame,
@@ -239,6 +262,7 @@ impl LinkMessage {
                     relay_willing: flags & HELLO_FLAG_RELAY != 0,
                     free_capacity_bucket,
                     l2cap_psm: (flags & HELLO_FLAG_L2CAP != 0).then_some(psm),
+                    features,
                 }));
             }
             T_SUMMARY => {
@@ -320,6 +344,14 @@ impl LinkMessage {
             T_PING => Self::Ping(r.u32()?),
             T_PONG => Self::Pong(r.u32()?),
             T_BYE => Self::Bye(r.u8()?),
+            T_PRESENCE => {
+                let n = r.count(MAX_ITEMS)?;
+                let mut tags = Vec::with_capacity(n);
+                for _ in 0..n {
+                    tags.push(r.array()?);
+                }
+                Self::Presence(tags)
+            }
             other => return Err(ProtoError::UnknownType(other)),
         };
         r.finish()?;
@@ -327,18 +359,24 @@ impl LinkMessage {
     }
 }
 
-/// HELLO may end with (type u8, len u8, value) extension fields from newer
-/// versions. They are validated for shape and ignored.
-fn skip_tlvs(r: &mut Reader<'_>) -> Result<(), ProtoError> {
+/// HELLO may end with (type u8, len u8, value) extension fields. All are
+/// validated for shape; the features field is read and unknown ones are
+/// ignored, so newer peers can add fields without breaking older ones.
+fn read_tlvs(r: &mut Reader<'_>) -> Result<u8, ProtoError> {
     if r.remaining() > MAX_TLV_BYTES {
         return Err(ProtoError::BadLength);
     }
+    let mut features = 0;
     while r.remaining() > 0 {
-        let _kind = r.u8()?;
+        let kind = r.u8()?;
         let len = usize::from(r.u8()?);
-        r.take(len)?;
+        let value = r.take(len)?;
+        if kind == TLV_FEATURES {
+            // Longer values are allowed for future bits; only the first byte is known.
+            features = value.first().copied().unwrap_or(0);
+        }
     }
-    Ok(())
+    Ok(features)
 }
 
 #[cfg(test)]
@@ -354,6 +392,7 @@ mod tests {
             relay_willing: true,
             free_capacity_bucket: 200,
             l2cap_psm: Some(0x0081),
+            features: 0,
         }
     }
 
@@ -366,6 +405,35 @@ mod tests {
         assert_eq!(LinkMessage::decode(&bytes).unwrap(), msg);
         bytes.extend_from_slice(&[0x11, 5, 1]);
         assert_eq!(LinkMessage::decode(&bytes), Err(ProtoError::Truncated));
+    }
+
+    #[test]
+    fn hello_features_extension_and_presence_bounds() {
+        let msg = LinkMessage::Hello(Hello {
+            features: FEATURE_PRESENCE,
+            ..hello()
+        });
+        let bytes = msg.encode().unwrap();
+        assert_eq!(
+            &bytes[bytes.len() - 3..],
+            &[TLV_FEATURES, 1, FEATURE_PRESENCE]
+        );
+        assert_eq!(LinkMessage::decode(&bytes).unwrap(), msg);
+        // Without features nothing is appended, so older HELLO bytes are unchanged.
+        let plain = LinkMessage::Hello(hello()).encode().unwrap();
+        assert_eq!(plain.len() + 3, bytes.len());
+        // A longer features value (future bits) still reads the first byte.
+        let mut longer = plain.clone();
+        longer.extend_from_slice(&[TLV_FEATURES, 2, FEATURE_PRESENCE, 0xFF]);
+        assert_eq!(LinkMessage::decode(&longer).unwrap(), msg);
+
+        let too_many = LinkMessage::Presence(vec![[0; 16]; MAX_ITEMS + 1]);
+        assert_eq!(too_many.encode(), Err(ProtoError::TooManyItems));
+        let mut raw = vec![T_PRESENCE];
+        raw.extend_from_slice(&u16::try_from(MAX_ITEMS + 1).unwrap().to_be_bytes());
+        assert!(LinkMessage::decode(&raw).is_err());
+        let truncated = [T_PRESENCE, 0, 1, 9, 9];
+        assert_eq!(LinkMessage::decode(&truncated), Err(ProtoError::Truncated));
     }
 
     #[test]
@@ -413,6 +481,8 @@ mod tests {
             LinkMessage::Ping(1),
             LinkMessage::Pong(2),
             LinkMessage::Bye(3),
+            LinkMessage::Presence(vec![[7; 16], [8; 16]]),
+            LinkMessage::Presence(vec![]),
         ];
         for m in msgs {
             let bytes = m.encode().unwrap();

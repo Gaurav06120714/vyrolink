@@ -39,6 +39,10 @@ internal class LoopbackPeer private constructor(
     node.sendText(contactOfMe, text, now())
   }
 
+  fun sendFile(name: String, data: ByteArray) {
+    node.sendAttachment(contactOfMe, 2u, name, data, "", null, now())
+  }
+
   /** One encounter, 185-byte writes, until both sides go quiet. */
   fun exchange(me: VlNode) {
     val a = me.linkOpen(true)

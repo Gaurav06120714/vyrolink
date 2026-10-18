@@ -5,3 +5,7 @@ analyzer:
     - build/**
     - android/**
     - ios/**
+
+# The code is formatted at 120 columns; `dart format` reads this.
+formatter:
+  page_width: 120

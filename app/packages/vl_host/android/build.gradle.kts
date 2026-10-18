@@ -42,6 +42,8 @@ android {
     }
 
     defaultConfig {
+        // Keep JNA and the Rust bindings intact in shrunk (release) app builds.
+        consumerProguardFiles("consumer-rules.pro")
         // ADR-016: Android 12 (API 31) is the minimum; BLE permissions start there.
         minSdk = 31
     }
@@ -82,5 +84,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.6.1")
     implementation("androidx.camera:camera-view:1.6.1")
     implementation("com.google.zxing:core:3.5.4")
+    // Same ID after a reinstall on this phone (ADR-038); device-only, no cloud copy.
+    implementation("com.google.android.gms:play-services-auth-blockstore:16.4.0")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 }

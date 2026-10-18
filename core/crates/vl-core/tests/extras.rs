@@ -185,7 +185,9 @@ fn largest_file_is_delivered_directly_in_one_meeting() {
         .send_attachment(&bob_c, ATTACHMENT_FILE, "notes.pdf", &file, "", None, T0)
         .unwrap();
     encounter(&mut alice, &mut bob, T0 + 60, MTU);
-    let got = bob.node.attachment(&m).unwrap();
+    let got = bob.node.attachment(&m).unwrap().unwrap();
+    assert!(got.complete && !got.outgoing);
+    assert_eq!(got.name, "notes.pdf");
     assert_eq!(bob.node.attachment_data(&m).unwrap().unwrap(), file);
 }
 
@@ -262,4 +264,15 @@ fn deleting_an_attachment_message_drops_its_bytes() {
     encounter(&mut alice, &mut bob, T0 + 30, MTU);
     assert!(bob.node.attachment(&m).unwrap().is_none());
     assert!(bob.node.attachment_data(&m).unwrap().is_none());
+}
+
+#[test]
+fn resync_interval_defaults_to_5_and_is_clamped() {
+    let mut d = device("rs-a");
+    assert_eq!(d.node.resync_secs().unwrap(), 5);
+    assert_eq!(d.node.set_resync_secs(0).unwrap(), 1);
+    assert_eq!(d.node.set_resync_secs(300).unwrap(), 45);
+    assert_eq!(d.node.set_resync_secs(12).unwrap(), 12);
+    let d = reopen(d);
+    assert_eq!(d.node.resync_secs().unwrap(), 12, "kept across restarts");
 }

@@ -69,13 +69,38 @@ class _PairingScreenState extends State<PairingScreen> {
     }
   }
 
+  /// A QR "paper" message (ADR-036) instead of a pairing code.
+  Future<void> _onPaper(String code) async {
+    setState(() => _busy = true);
+    final s = context.services;
+    try {
+      final from = await s.mutate((api) => api.receivePaper(code));
+      final contact = (await s.call((api) => api.contacts()))
+          .where((c) => idKey(c.contactId) == idKey(from))
+          .firstOrNull;
+      HapticFeedback.lightImpact();
+      if (!mounted) return;
+      final nav = Navigator.of(context);
+      nav.pop();
+      if (contact != null) Routes.conversation(nav.context, contact);
+    } on VlFailure catch (e) {
+      if (!mounted) return;
+      HapticFeedback.heavyImpact();
+      setState(() => _scanError = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _requestCamera() async {
     final state = await context.services.call((api) => api.requestCameraPermission());
     if (mounted) setState(() => _camera = state);
   }
 
   Future<void> _onScan(String text) async {
-    if (_busy || _paired != null || _tab != 1) return;
+    if (_busy || _tab != 1) return;
+    if (text.startsWith('VLM1:')) return _onPaper(text);
+    if (_paired != null) return;
     setState(() => _busy = true);
     final s = context.services;
     try {
@@ -201,7 +226,7 @@ class _PairingScreenState extends State<PairingScreen> {
             InfoBanner(kind: BannerKind.err, text: _scanError!)
           else
             Text(
-              'Point the camera at the code on their phone.',
+              'Point the camera at the code on their phone. Message codes work here too.',
               style: t.bodyMedium!.copyWith(color: c.text2),
               textAlign: TextAlign.center,
             ),

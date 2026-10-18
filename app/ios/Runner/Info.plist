@@ -49,6 +49,20 @@
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>VYRO LINK passes encrypted messages between nearby phones over Bluetooth. It never shows who is nearby and does not track your location.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Google sign-in returns here (ADR-030): the reversed iOS client ID. -->
+				<string>com.googleusercontent.apps.427548154015-2il7ro2kqe58ol780j1a2l5b22gfmgj8</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Only when you tap Share location: your position is sent end-to-end encrypted to the contact you chose. VYRO LINK never tracks you.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Face ID unlocks VYRO LINK when you turn on App lock. Nothing about your face leaves the phone.</string>
 	<key>NSCameraUsageDescription</key>

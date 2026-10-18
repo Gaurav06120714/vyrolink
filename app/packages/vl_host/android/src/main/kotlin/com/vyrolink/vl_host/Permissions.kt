@@ -18,7 +18,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 /**
  * Runtime permissions, requested only when a feature needs them (Doc 16
  * screen 13): Bluetooth when the relay is turned on, camera on the pairing
- * screen, notifications from Settings. Location is never requested
+ * screen, notifications from Settings, and location only when the user taps
+ * "Share location" (ADR-034). Bluetooth never needs location
  * (BLUETOOTH_SCAN is declared `neverForLocation`).
  */
 internal class Permissions(private val context: Context) : PluginRegistry.RequestPermissionsResultListener {
@@ -67,6 +68,15 @@ internal class Permissions(private val context: Context) : PluginRegistry.Reques
     }
   }
 
+  private val location = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+
+  fun hasLocation() = location.any(::granted)
+
+  /** True if precise or approximate location is allowed afterwards. */
+  suspend fun requestLocation(): Boolean = suspendCancellableCoroutine { cont ->
+    request(location) { cont.resume(hasLocation()) }
+  }
+
   fun openAppSettings() {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -84,8 +94,14 @@ internal class Permissions(private val context: Context) : PluginRegistry.Reques
 internal object Notifier {
   private const val CHANNEL = "messages"
   private const val ID = 1
+  private const val NEARBY_ID = 3
 
-  fun newMessage(context: Context) {
+  fun newMessage(context: Context) = post(context, ID, "You have a new message.")
+
+  /** ADR-029: never names the contact. */
+  fun contactNearby(context: Context) = post(context, NEARBY_ID, "A contact is nearby.")
+
+  private fun post(context: Context, id: Int, text: String) {
     if (Build.VERSION.SDK_INT >= 33 &&
       context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
     ) return
@@ -98,12 +114,12 @@ internal object Notifier {
     val n = Notification.Builder(context, CHANNEL)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
       .setContentTitle("VYRO LINK")
-      .setContentText("You have a new message.")
+      .setContentText(text)
       .setVisibility(Notification.VISIBILITY_PRIVATE)
       .setAutoCancel(true)
       .apply { tap?.let { setContentIntent(it) } }
       .build()
-    nm.notify(ID, n)
+    nm.notify(id, n)
   }
 
   fun cancelAll(context: Context) {

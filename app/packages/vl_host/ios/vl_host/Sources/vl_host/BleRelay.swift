@@ -18,7 +18,6 @@ let vlLinkUUID = CBUUID(string: "60EAE795-7B2A-49EE-B8C2-7430FF5FF590")
 final class BleRelay: NSObject {
   static let idleSeconds: TimeInterval = 4
   static let sessionLimit: TimeInterval = 60
-  static let cooldown: TimeInterval = 45
   static let maxCentralLinks = 2
   static let maintainEvery: TimeInterval = 15 * 60
 
@@ -262,7 +261,8 @@ final class BleRelay: NSObject {
     nodeProvider()?.linkClose(linkId: s.linkId)
     if asCentral {
       self.asCentral[id] = nil
-      cooldownUntil[id] = Date().addingTimeInterval(Self.cooldown)
+      // ADR-032: the user's re-sync interval (1–45 s, default 5).
+      cooldownUntil[id] = Date().addingTimeInterval(TimeInterval(nodeProvider()?.resyncSecs() ?? 5))
     } else {
       asPeripheral[id] = nil
     }
@@ -288,18 +288,26 @@ final class BleRelay: NSObject {
   /// A generic local notification when mail arrived while the app was not in
   /// front. Never includes the sender or the text (Doc 16 §11 default).
   private func notifyIfBackgrounded() {
+    // ADR-029: a paired contact came into range. Says nobody's name.
+    if let arrived = nodeProvider()?.takeNearbyArrivals(), arrived > 0 {
+      post(id: "vl.contact-nearby", body: "A contact is nearby.")
+    }
     guard let summaries = try? nodeProvider()?.conversationSummaries() else { return }
     let unread = summaries.reduce(0) { $0 + Int($1.unread) }
     defer { lastUnread = unread }
     guard let before = lastUnread, unread > before else { return }
+    post(id: "vl.new-message", body: "You have a new message.")
+  }
+
+  private func post(id: String, body: String) {
     DispatchQueue.main.async {
       guard UIApplication.shared.applicationState != .active else { return }
       let content = UNMutableNotificationContent()
       content.title = "VYRO LINK"
-      content.body = "You have a new message."
+      content.body = body
       content.sound = .default
       UNUserNotificationCenter.current().add(
-        UNNotificationRequest(identifier: "vl.new-message", content: content, trigger: nil))
+        UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
   }
 }

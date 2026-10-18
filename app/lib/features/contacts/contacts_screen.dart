@@ -4,6 +4,7 @@ import 'package:vl_host/vl_host.dart';
 import '../../app/live.dart';
 import '../../app/routes.dart';
 import '../../design/tokens.dart';
+import '../../app/services.dart';
 import '../../design/widgets/avatar.dart';
 import '../../design/widgets/states.dart';
 
@@ -43,14 +44,23 @@ class ContactsScreen extends StatelessWidget {
                 itemCount: sorted.length,
                 itemBuilder: (context, i) {
                   final c = sorted[i];
-                  final status = [c.verified ? 'Verified' : 'Not verified', if (c.blocked) 'Blocked'].join(' · ');
-                  return ListTile(
-                    contentPadding: EdgeInsets.symmetric(horizontal: Space.gutter(context), vertical: Space.xs),
-                    leading: Avatar(name: c.displayName, seed: c.contactId, size: 44),
-                    title: Text(c.displayName, maxLines: 2, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(status),
-                    trailing: VerifiedBadge(verified: c.verified, size: 20),
-                    onTap: () => Routes.contact(context, c.contactId),
+                  return ValueListenableBuilder<Map<String, int>>(
+                    valueListenable: context.services.nearby,
+                    builder: (context, nearby, _) {
+                      final status = [
+                        if (nearby.containsKey(idKey(c.contactId))) 'Nearby',
+                        c.verified ? 'Verified' : 'Not verified',
+                        if (c.blocked) 'Blocked',
+                      ].join(' · ');
+                      return ListTile(
+                        contentPadding: EdgeInsets.symmetric(horizontal: Space.gutter(context), vertical: Space.xs),
+                        leading: Avatar(name: c.displayName, seed: c.contactId, size: 44),
+                        title: Text(c.displayName, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(status),
+                        trailing: VerifiedBadge(verified: c.verified, size: 20),
+                        onTap: () => Routes.contact(context, c.contactId),
+                      );
+                    },
                   );
                 },
               );

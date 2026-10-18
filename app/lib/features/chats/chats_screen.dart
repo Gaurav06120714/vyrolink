@@ -7,6 +7,7 @@ import '../../app/services.dart';
 import '../../design/tokens.dart';
 import '../../design/widgets/avatar.dart';
 import '../../design/widgets/delivery.dart';
+import '../../design/widgets/nearby.dart';
 import '../../design/widgets/states.dart';
 import '../../util/format.dart';
 import '../conversation/conversation_screen.dart';
@@ -160,6 +161,14 @@ class _ChatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Map<String, int>>(
+      valueListenable: context.services.nearby,
+      builder: (context, nearby, _) =>
+          _row(context, entry.direct != null && nearby.containsKey(idKey(entry.direct!.contact.contactId))),
+    );
+  }
+
+  Widget _row(BuildContext context, bool near) {
     final c = VlColors.of(context);
     final t = Theme.of(context).textTheme;
     final d = entry.direct;
@@ -200,6 +209,7 @@ class _ChatRow extends StatelessWidget {
     final label = [
       name,
       if (d?.contact.blocked ?? false) 'blocked',
+      if (near) 'nearby',
       if (unread > 0) '$unread unread',
       preview,
       if (glyph != null) DeliveryInfo.of(glyph).label,
@@ -237,6 +247,7 @@ class _ChatRow extends StatelessWidget {
                           const SizedBox(width: Space.xs),
                           Icon(Icons.block_rounded, size: 15, color: c.text2),
                         ],
+                        if (near) ...[const SizedBox(width: Space.s), NearbyTag(contactId: d!.contact.contactId)],
                         const Spacer(),
                         if (entry.lastAt != null)
                           Text(

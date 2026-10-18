@@ -16,8 +16,9 @@ mod pairing_code;
 pub use card::{MAX_NAME_LEN, MAX_OTKS, PairingCard};
 pub use content::{
     ATTACHMENT_FILE, ATTACHMENT_IMAGE, CHUNK_BYTES, CHUNK_TAG_BYTES, CONTENT_VERSION, ChunkPayload,
-    Content, GroupMember, MAX_ATTACHMENT_NAME, MAX_CAPTION_BYTES, MAX_EDIT_SEQ, MAX_FILE_BYTES,
-    MAX_GROUP_MEMBERS, MAX_IMAGE_BYTES, MAX_TIMER_SECS, MIN_TIMER_SECS, REACTIONS, chunk_count_for,
+    Content, GroupMember, GroupRef, MAX_ATTACHMENT_NAME, MAX_CAPTION_BYTES, MAX_EDIT_SEQ,
+    MAX_FILE_BYTES, MAX_GROUP_MEMBERS, MAX_IMAGE_BYTES, MAX_POLL_OPTION_BYTES, MAX_POLL_OPTIONS,
+    MAX_POLL_QUESTION_BYTES, MAX_TIMER_SECS, MIN_TIMER_SECS, REACTIONS, chunk_count_for,
 };
 pub use envelope::{
     AEAD_OVERHEAD, Admission, BODY_BUCKETS, DEFAULT_HOP_LIMIT, Envelope, EnvelopeKind,
@@ -27,11 +28,12 @@ pub use envelope::{
 pub use frame::{Deframer, frame};
 pub use inner::{INNER_HEADER_LEN, Inner, InnerKind, MAX_RECEIPT_REFS, Receipt};
 pub use link::{
-    CustodyItem, CustodyStatus, Hello, LINK_VERSION, LinkMessage, MAX_FRAME_LEN, MAX_ITEMS,
-    RelayClass, RequestItem, RequestRole, SummaryEntry, VaccineItem,
+    CustodyItem, CustodyStatus, FEATURE_PRESENCE, Hello, LINK_VERSION, LinkMessage, MAX_FRAME_LEN,
+    MAX_ITEMS, PRESENCE_PAD, RelayClass, RequestItem, RequestRole, SummaryEntry, VaccineItem,
 };
 pub use pairing_code::{
-    MAX_PAIRING_CODE_LEN, PAIRING_CODE_PREFIX, decode_pairing_code, encode_pairing_code,
+    MAX_PAIRING_CODE_LEN, PAIRING_CODE_PREFIX, PAPER_PREFIX, decode_pairing_code,
+    decode_paper_message, encode_pairing_code, encode_paper_message,
 };
 
 use std::fmt;

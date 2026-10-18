@@ -21,6 +21,10 @@ enum VlErrorCode {
   notGroupCreator('NotGroupCreator'),
   invalidGroupSize('InvalidGroupSize'),
   ownPairingCode('OwnPairingCode'),
+  invalidAttachment('InvalidAttachment'),
+  cannotResend('CannotResend'),
+  paperUnavailable('PaperUnavailable'),
+  notForThisPhone('NotForThisPhone'),
   invalidInput('InvalidInput'),
   storage('Storage'),
   crypto('Crypto'),
@@ -64,6 +68,11 @@ class VlFailure implements Exception {
     VlErrorCode.notGroupCreator => 'Only the person who created the group can change its members.',
     VlErrorCode.invalidGroupSize => 'A group has 2 to 8 people, including you.',
     VlErrorCode.invalidTimer => 'Choose a time between 1 minute and 1 year, or off.',
+    VlErrorCode.invalidAttachment => 'Photos must fit 16 KB and files 64 KB.',
+    VlErrorCode.cannotResend => 'Only messages that expired or were never confirmed can be sent again.',
+    VlErrorCode.paperUnavailable =>
+      'This message can\'t be shown as a code: it was delivered or expired already, or it is too long.',
+    VlErrorCode.notForThisPhone => 'This message code is for someone else, or it has expired.',
     VlErrorCode.keyStore =>
       'Secure storage is unavailable. VYRO LINK needs a device passcode to protect your messages.',
     VlErrorCode.storage => 'The encrypted storage could not be read or written.',

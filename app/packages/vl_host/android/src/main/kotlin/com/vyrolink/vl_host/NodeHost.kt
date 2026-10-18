@@ -46,6 +46,7 @@ internal class NodeHost(
   }
 
   private val keys = KeyStore(context)
+  private val backup = IdentityBackup(context)
   private val dir = File(context.noBackupFilesDir, "vyrolink").apply { mkdirs() }
   private val relayDb = File(dir, "relay.db")
   private val conversationDb = File(dir, "conversation.db")
@@ -87,6 +88,7 @@ internal class NodeHost(
 
   override fun start(): StartupInfo = try {
     val n = open()
+    if (n.hasIdentity()) runCatching { backup.save(n.identityBackup()) }
     if (n.hasIdentity() && n.setting(RELAY_SETTING) == "1") {
       relay?.setMode(savedMode())
       relay?.setEnabled(true)
@@ -97,8 +99,18 @@ internal class NodeHost(
     throw map(e)
   }
 
-  override fun createIdentity() = run { it.createIdentity(now()) }
+  override fun createIdentity(): Boolean = run { n ->
+    val saved = backup.load()
+    if (saved != null && runCatching { n.restoreIdentity(saved, now()) }.isSuccess) return@run true
+    n.createIdentity(now())
+    backup.save(n.identityBackup())
+    false
+  }
   override fun myFingerprint(): ByteArray = run { it.myFingerprint() }
+  override fun internetOutbox(): List<ByteArray> = run { it.internetOutbox(now()) }
+  override fun internetUploaded(envelopes: List<ByteArray>) = run { it.internetUploaded(envelopes, now()) }
+  override fun internetTags(): List<ByteArray> = run { it.internetTags() }
+  override fun receiveInternet(envelope: ByteArray): Boolean = run { it.receiveInternet(envelope, now()) }
   override fun setting(key: String): String? = run { it.setting(key) }
   override fun setSetting(key: String, value: String?) = run { it.setSetting(key, value) }
   override fun maintain() = run { it.maintain(now()) }
@@ -169,6 +181,8 @@ internal class NodeHost(
     peer = null
     Notifier.cancelAll(context)
     try {
+      // 0. The reinstall copy of the identity goes first (ADR-038).
+      val backupError = runCatching { backup.destroy() }.exceptionOrNull()
       // 1. Destroy the keys (cryptographic erasure); stop here if that fails.
       keys.destroyAll()
       // 2. Then remove the files and refuse further use of the old node.
@@ -179,6 +193,9 @@ internal class NodeHost(
       } else {
         removeDatabaseFiles(relayDb.path, conversationDb.path)
       }
+      backupError?.let { throw FlutterError("KeyStore", it.message, null) }
+    } catch (e: FlutterError) {
+      throw e
     } catch (e: Throwable) {
       throw map(e)
     }
@@ -286,6 +303,51 @@ internal class NodeHost(
 
   // Bluetooth and permissions
 
+  override suspend fun currentLocation(): LocationInfo? {
+    if (!permissions.hasLocation() && !permissions.requestLocation()) return null
+    return Location.currentFix(context)
+  }
+
+  override fun sendLocation(contactId: ByteArray, fix: LocationInfo): ByteArray = run {
+    it.sendLocation(
+      contactId, fix.latE7.toInt(), fix.lonE7.toInt(), fix.accuracyM.coerceIn(0, 65_535).toInt().toUShort(),
+      fix.capturedMs.coerceAtLeast(0).toULong(), now(),
+    )
+  }
+
+  override fun openMap(latE7: Long, lonE7: Long, label: String) = Location.openMap(context, latE7, lonE7, label)
+
+  override fun sendPoll(contactId: ByteArray, question: String, options: List<String>, multi: Boolean): ByteArray =
+    run { it.sendPoll(contactId, question, options, multi, now()) }
+
+  override fun sendGroupPoll(groupId: ByteArray, question: String, options: List<String>, multi: Boolean): ByteArray =
+    run { it.sendGroupPoll(groupId, question, options, multi, now()) }
+
+  override fun vote(pollId: ByteArray, choices: Long) =
+    run { it.vote(pollId, choices.coerceIn(0, 65_535).toInt().toUShort(), now()) }
+
+  override fun introduce(contactA: ByteArray, contactB: ByteArray): ByteArray =
+    run { it.introduce(contactA, contactB, now()) }
+
+  override fun acceptIntro(introId: ByteArray, myName: String) = run { it.acceptIntro(introId, myName, now()) }
+
+  override fun declineIntro(introId: ByteArray) = run { it.declineIntro(introId) }
+
+  override fun paperMessage(messageId: ByteArray): String = run { it.paperMessage(messageId) }
+
+  override fun receivePaper(code: String): ByteArray = run { it.receivePaper(code, now()) }
+
+  override fun resyncSecs(): Long = current?.resyncSecs()?.toLong() ?: 5L
+
+  override fun setResyncSecs(secs: Long): Long =
+    run { it.setResyncSecs(secs.coerceIn(1, 45).toUInt()).toLong() }
+
+  override fun nearbyContacts(withinSecs: Long): List<NearbyContact> = run { n ->
+    n.nearbyContacts(now(), withinSecs.coerceAtLeast(0).toULong()).map {
+      NearbyContact(it.contactId, it.seenSecs.toLong())
+    }
+  }
+
   override fun networkStatus(): NetworkStatus =
     relay?.status() ?: throw FlutterError("Bluetooth", "relay not set up", null)
 
@@ -330,6 +392,12 @@ internal class NodeHost(
     try { p.send(text) } catch (e: Throwable) { throw map(e) }
   }
 
+  override fun debugPeerSendFile(name: String, data: ByteArray) {
+    if (!debuggable) throw FlutterError("NotAvailable", "debug builds only", null)
+    val p = peer ?: throw FlutterError("NotAvailable", "create a peer first", null)
+    try { p.sendFile(name, data) } catch (e: Throwable) { throw map(e) }
+  }
+
   override fun debugExchange() {
     if (!debuggable) throw FlutterError("NotAvailable", "debug builds only", null)
     val p = peer ?: throw FlutterError("NotAvailable", "create a peer first", null)
@@ -353,7 +421,7 @@ internal fun CoreDeliveryState.toPigeon(): DeliveryState = when (this) {
 }
 
 internal fun CoreContact.toPigeon() =
-  Contact(contactId, displayName, fingerprint, idCode, verified, blocked, safetyNumber)
+  Contact(contactId, displayName, fingerprint, idCode, verified, blocked, safetyNumber, lastSeenSecs, introducedBy)
 
 internal fun CoreMessage.toPigeon() = Message(
   messageId, contactId, outgoing, body, createdAtSecs, state.toPigeon(), replyTo, forwarded, deleted, edited,
@@ -364,6 +432,9 @@ internal fun CoreMessage.toPigeon() = Message(
       it.complete, it.deliveredChunks.toLong(),
     )
   },
+  location?.let { LocationInfo(it.latE7.toLong(), it.lonE7.toLong(), it.accuracyM.toLong(), it.capturedMs.toLong()) },
+  poll?.toPigeon(),
+  intro?.let { IntroInfo(it.introId, it.otherName, it.state.toLong()) },
 )
 
 internal fun CoreGroup.toPigeon() = Group(
@@ -371,4 +442,7 @@ internal fun CoreGroup.toPigeon() = Group(
 )
 
 internal fun CoreGroupMessage.toPigeon() =
-  GroupMessage(groupMsgId, authorFingerprint, outgoing, body, replyTo, createdAtSecs)
+  GroupMessage(groupMsgId, authorFingerprint, outgoing, body, replyTo, createdAtSecs, poll?.toPigeon())
+
+internal fun uniffi.vl_ffi.PollInfo.toPigeon() =
+  PollInfo(question, options, multi, counts.map { it.toLong() }, mine.toLong(), voters.toLong())

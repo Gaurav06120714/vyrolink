@@ -1,0 +1,24 @@
+[package]
+name = "vl-mailbox"
+description = "Internet mailbox for sealed VYRO LINK envelopes (ADR-039): stores what it cannot read."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vl-proto = { path = "../vl-proto" }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
+tokio-postgres = "0.7"
+tower-http = { version = "0.6", features = ["cors"] }
+serde = { version = "1", features = ["derive"] }
+base64 = "0.22"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+serde_json = "1"

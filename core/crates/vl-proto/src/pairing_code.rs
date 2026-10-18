@@ -11,10 +11,30 @@ pub const MAX_PAIRING_CODE_LEN: usize = 4096;
 
 const ALPHABET: &[u8; 45] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 
+/// Prefix of a QR "paper" message (ADR-036): a complete sealed envelope.
+pub const PAPER_PREFIX: &str = "VLM1:";
+
 pub fn encode_pairing_code(card: &[u8]) -> String {
-    let mut out = String::with_capacity(PAIRING_CODE_PREFIX.len() + card.len() * 3 / 2 + 2);
-    out.push_str(PAIRING_CODE_PREFIX);
-    for pair in card.chunks(2) {
+    encode_b45(PAIRING_CODE_PREFIX, card)
+}
+
+pub fn decode_pairing_code(code: &str) -> Result<Vec<u8>, ProtoError> {
+    decode_b45(PAIRING_CODE_PREFIX, code)
+}
+
+/// A sealed envelope as QR text. It is exactly what Bluetooth would carry.
+pub fn encode_paper_message(envelope: &[u8]) -> String {
+    encode_b45(PAPER_PREFIX, envelope)
+}
+
+pub fn decode_paper_message(code: &str) -> Result<Vec<u8>, ProtoError> {
+    decode_b45(PAPER_PREFIX, code)
+}
+
+fn encode_b45(prefix: &str, bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(prefix.len() + bytes.len() * 3 / 2 + 2);
+    out.push_str(prefix);
+    for pair in bytes.chunks(2) {
         let (mut n, digits) = match pair {
             [a, b] => (usize::from(*a) * 256 + usize::from(*b), 3),
             [a] => (usize::from(*a), 2),
@@ -30,12 +50,12 @@ pub fn encode_pairing_code(card: &[u8]) -> String {
     out
 }
 
-pub fn decode_pairing_code(code: &str) -> Result<Vec<u8>, ProtoError> {
+fn decode_b45(prefix: &str, code: &str) -> Result<Vec<u8>, ProtoError> {
     if code.len() > MAX_PAIRING_CODE_LEN {
         return Err(ProtoError::BadLength);
     }
     let body = code
-        .strip_prefix(PAIRING_CODE_PREFIX)
+        .strip_prefix(prefix)
         .ok_or(ProtoError::InvalidField("pairing code prefix"))?;
     let values = body
         .bytes()

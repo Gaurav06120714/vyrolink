@@ -7,6 +7,7 @@ use vodozemac::olm::{
 };
 use vodozemac::{Curve25519PublicKey, Ed25519PublicKey, Ed25519Signature};
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroizing;
 
 /// Olm session format. Version 1 is the standard (libolm-compatible) format;
 /// its 8-byte truncated MAC is backed by the 16-byte ChaCha20-Poly1305 tag of
@@ -64,6 +65,23 @@ pub fn verify_card(card: &PairingCard) -> Result<(), CryptoError> {
         .map_err(|_| CryptoError::BadSignature)
 }
 
+const BACKUP_VERSION: u8 = 1;
+
+/// Replaces the one-time and fallback keys of a pickled account with those of
+/// a brand-new account (none), keeping only the long-term identity keys.
+fn long_term_only(
+    pickle: Result<serde_json::Value, serde_json::Error>,
+) -> Result<serde_json::Value, CryptoError> {
+    let mut v = pickle.map_err(|_| CryptoError::Pickle)?;
+    let mut empty =
+        serde_json::to_value(Account::new().pickle()).map_err(|_| CryptoError::Pickle)?;
+    for field in ["one_time_keys", "fallback_keys"] {
+        let slot = v.get_mut(field).ok_or(CryptoError::Pickle)?;
+        *slot = empty.get_mut(field).ok_or(CryptoError::Pickle)?.take();
+    }
+    Ok(v)
+}
+
 impl Identity {
     pub fn generate() -> Result<Self, CryptoError> {
         Ok(Self {
@@ -115,11 +133,18 @@ impl Identity {
         if mine.olm_fingerprint_key != self.fingerprint_key() {
             return Err(CryptoError::InvalidKey);
         }
+        self.pair_with(theirs)
+    }
+
+    /// Verifies `theirs` and derives the pairwise keys from the two identities
+    /// alone (ADR-031), as used for introductions (ADR-037).
+    pub fn pair_with(&self, theirs: &PairingCard) -> Result<PairKeys, CryptoError> {
+        verify_card(theirs)?;
         PairKeys::derive(
             &self.addressing,
-            &card_hash(mine)?,
+            &self.fingerprint_key(),
             &theirs.addressing_key,
-            &card_hash(theirs)?,
+            &theirs.olm_fingerprint_key,
         )
     }
 
@@ -166,6 +191,43 @@ impl Identity {
             self.account.pickle().encrypt(pickle_key),
             self.addressing.to_bytes(),
         )
+    }
+
+    /// Long-term keys only, for the platform store that outlives an uninstall
+    /// (ADR-038): `1 ‖ addressing secret ‖ account pickle (JSON)` with the
+    /// one-time and fallback keys removed, so a restored phone can never reuse
+    /// a one-time key its earlier install published. Secret: never log it.
+    pub fn backup(&self) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
+        let json = Zeroizing::new(
+            serde_json::to_vec(&long_term_only(serde_json::to_value(
+                self.account.pickle(),
+            ))?)
+            .map_err(|_| CryptoError::Pickle)?,
+        );
+        let mut out = Zeroizing::new(Vec::with_capacity(33 + json.len()));
+        out.push(BACKUP_VERSION);
+        out.extend_from_slice(&self.addressing.to_bytes());
+        out.extend_from_slice(&json);
+        Ok(out)
+    }
+
+    /// Inverse of [`Self::backup`]. One-time and fallback keys are stripped
+    /// again here, so even a crafted backup cannot bring old ones back.
+    pub fn from_backup(backup: &[u8]) -> Result<Self, CryptoError> {
+        let (&version, rest) = backup.split_first().ok_or(CryptoError::Pickle)?;
+        if version != BACKUP_VERSION || rest.len() <= 32 {
+            return Err(CryptoError::Pickle);
+        }
+        let (addressing, json) = rest.split_at(32);
+        let mut addr = Zeroizing::new([0u8; 32]);
+        addr.copy_from_slice(addressing);
+        let pickle: AccountPickle =
+            serde_json::from_value(long_term_only(serde_json::from_slice(json))?)
+                .map_err(|_| CryptoError::Pickle)?;
+        Ok(Self {
+            account: Account::from_pickle(pickle),
+            addressing: StaticSecret::from(*addr),
+        })
     }
 
     pub fn from_pickle(
@@ -261,6 +323,53 @@ mod tests {
             );
             assert!(!is_low_order(&alice_card.addressing_key));
         }
+    }
+
+    #[test]
+    fn backup_restores_the_identity_but_no_one_time_key() {
+        let mut id = Identity::generate().unwrap();
+        let mut peer = Identity::generate().unwrap();
+        let old_card = id.create_card("A", 3).unwrap();
+        let backup = id.backup().unwrap();
+        let mut restored = Identity::from_backup(&backup).unwrap();
+        assert_eq!(restored.fingerprint_key(), id.fingerprint_key());
+        assert_eq!(restored.identity_key(), id.identity_key());
+        assert_eq!(restored.addressing_public(), id.addressing_public());
+
+        // A pre-key message made with a one-time key from the old card still
+        // opens on the original install, but never on the restored one.
+        let peer_card = peer.create_card("P", 1).unwrap();
+        let mut out = peer.outbound_session(&old_card, 0).unwrap();
+        let Ok(vodozemac::olm::OlmMessage::PreKey(m)) = out.encrypt(b"hi") else {
+            panic!("first message is a pre-key message")
+        };
+        assert!(
+            restored
+                .inbound_session(&peer_card.olm_identity_key, &m)
+                .is_err()
+        );
+        assert!(id.inbound_session(&peer_card.olm_identity_key, &m).is_ok());
+
+        // Restored cards sign and carry fresh one-time keys.
+        let new_card = restored.create_card("A", 3).unwrap();
+        verify_card(&new_card).unwrap();
+        assert!(
+            new_card
+                .one_time_keys
+                .iter()
+                .all(|k| !old_card.one_time_keys.contains(k))
+        );
+    }
+
+    #[test]
+    fn damaged_backups_are_refused() {
+        let backup = Identity::generate().unwrap().backup().unwrap();
+        assert!(Identity::from_backup(&[]).is_err());
+        assert!(Identity::from_backup(&backup[..33]).is_err());
+        let mut wrong_version = backup.to_vec();
+        wrong_version[0] = 2;
+        assert!(Identity::from_backup(&wrong_version).is_err());
+        assert!(Identity::from_backup(&backup[..backup.len() - 1]).is_err());
     }
 
     #[test]

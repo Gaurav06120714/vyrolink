@@ -2,6 +2,8 @@
 
 Offline, end-to-end encrypted, store-and-forward messaging over Bluetooth LE (iOS + Android).
 
+> **Research and design documents** (`research/`, `references/`) were moved out of this project on 2026-10-18 to `../VyroLink-research/`. Links below that start with `research/` point there.
+
 **Status (2026-10-16):**
 - **Done:** the shared Rust core is implemented and tested on this Mac:
   - 137 tests, fuzzed, Swift interop passing;

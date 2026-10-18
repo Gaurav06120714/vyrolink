@@ -28,6 +28,8 @@ const MIGRATIONS: &[&str] = &["
     CREATE TABLE my_tags (tag BLOB PRIMARY KEY, contact_ref BLOB NOT NULL, epoch INTEGER NOT NULL) WITHOUT ROWID;
     CREATE INDEX my_tags_epoch ON my_tags(epoch);
     CREATE TABLE pair_keys (contact_ref BLOB PRIMARY KEY, keys BLOB NOT NULL) WITHOUT ROWID;
+", "
+    ALTER TABLE envelopes ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0;
 "];
 
 /// Class R database. Implements the routing [`Store`].
@@ -101,6 +103,53 @@ impl RelayDb {
             )
             .optional()?;
         found.map(|b| blob16(&b)).transpose()
+    }
+
+    /// Forgets that an envelope id was seen. Routing marks a copy addressed to
+    /// this device as seen before the node authenticates it; when that copy
+    /// turns out to be forged or corrupted, the node calls this so a relay
+    /// cannot suppress the genuine envelope by sending a bad copy first.
+    pub fn forget_seen(&mut self, id: &[u8; 16]) -> Result<(), DbError> {
+        self.conn
+            .execute("DELETE FROM seen WHERE envelope_id = ?1", [id.as_slice()])?;
+        Ok(())
+    }
+
+    /// Envelopes not yet given to the internet mailbox (ADR-039), mine first.
+    pub fn not_uploaded(&self, now_min: u32, limit: u32) -> Result<Vec<Vec<u8>>, DbError> {
+        let mut st = self.conn.prepare(
+            "SELECT wire FROM envelopes WHERE uploaded = 0 AND expiry_min > ?1
+             ORDER BY own DESC, stored_at_min LIMIT ?2",
+        )?;
+        let rows = st.query_map(params![now_min, limit], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Marks envelopes as held by the mailbox; returns the ones that are mine.
+    pub fn mark_uploaded(&mut self, ids: &[[u8; 16]]) -> Result<Vec<[u8; 16]>, DbError> {
+        let tx = self.conn.transaction()?;
+        let mut own = Vec::new();
+        for id in ids {
+            let mine: Option<bool> = tx
+                .query_row(
+                    "UPDATE envelopes SET uploaded = 1 WHERE envelope_id = ?1 RETURNING own",
+                    [id.as_slice()],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if mine == Some(true) {
+                own.push(*id);
+            }
+        }
+        tx.commit()?;
+        Ok(own)
+    }
+
+    /// Every tag that currently addresses this phone.
+    pub fn inbound_tags(&self) -> Result<Vec<[u8; 16]>, DbError> {
+        let mut st = self.conn.prepare("SELECT tag FROM my_tags")?;
+        let rows = st.query_map([], |r| r.get::<_, Vec<u8>>(0))?;
+        rows.map(|b| blob16(&b?)).collect()
     }
 
     /// Stored envelopes: (my own count, carried-for-others count, carried bytes).

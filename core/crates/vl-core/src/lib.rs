@@ -3,9 +3,16 @@
 //! and turns routing events into message-state changes. Time is always passed
 //! in by the caller so behaviour is deterministic and testable.
 
+mod internet;
+mod intro;
 mod link;
+mod paper;
+pub use intro::{INTRO_ACCEPTED, INTRO_ASKED, INTRO_CONNECTED, INTRO_DECLINED, INTRO_FAILED};
+mod share;
+pub use internet::INTERNET_BATCH;
+pub use share::{LOCATION_BODY, PollView};
 
-pub use link::LinkId;
+pub use link::{ARRIVAL_GAP_SECS, LinkId};
 
 use link::Link;
 use std::collections::HashMap;
@@ -77,6 +84,10 @@ pub enum CoreError {
     InvalidAttachment,
     /// Resend is only possible for my messages that expired or whose delivery is unknown.
     CannotResend,
+    /// A QR paper message can't be made: delivered or expired already, or too long (ADR-036).
+    PaperUnavailable,
+    /// The scanned message code is for someone else, or expired (ADR-036).
+    NotForThisPhone,
 }
 
 impl fmt::Display for CoreError {
@@ -110,6 +121,8 @@ impl fmt::Display for CoreError {
             Self::OwnPairingCode => f.write_str("this is your own pairing code"),
             Self::InvalidAttachment => f.write_str("attachment too large or invalid"),
             Self::CannotResend => f.write_str("only expired or unconfirmed messages can be resent"),
+            Self::PaperUnavailable => f.write_str("this message can't be shown as a code"),
+            Self::NotForThisPhone => f.write_str("this message code is not for this phone"),
         }
     }
 }
@@ -135,6 +148,11 @@ pub struct ContactInfo {
     pub verified: bool,
     pub blocked: bool,
     pub safety_number: String,
+    /// Unix seconds when a Bluetooth link last proved this contact was nearby
+    /// (ADR-033); `None` if never.
+    pub last_seen_secs: Option<i64>,
+    /// Name of the contact who introduced this one (ADR-037); `None` if met in person.
+    pub introduced_by: Option<String>,
 }
 
 /// One chat-list row: a contact, its newest message and unread count.
@@ -181,6 +199,11 @@ pub struct Node {
     pending_card: Option<PairingCard>,
     links: HashMap<LinkId, Link>,
     next_link: u64,
+    /// Contact id → when a link last proved that contact was in Bluetooth range
+    /// (ADR-029). Memory only: never written to disk.
+    nearby: HashMap<[u8; 16], u64>,
+    /// Contacts that came into range after being away (see `take_nearby_arrivals`).
+    nearby_arrivals: u32,
 }
 
 impl fmt::Debug for Node {
@@ -190,6 +213,12 @@ impl fmt::Debug for Node {
             .finish_non_exhaustive()
     }
 }
+
+/// Re-sync interval (ADR-032).
+pub const RESYNC_DEFAULT_SECS: u32 = 5;
+pub const RESYNC_MIN_SECS: u32 = 1;
+pub const RESYNC_MAX_SECS: u32 = 45;
+const RESYNC_SETTING: &str = "relay.resync_secs";
 
 fn now_min(now_secs: u64) -> u32 {
     u32::try_from(now_secs / 60).unwrap_or(u32::MAX)
@@ -228,6 +257,8 @@ impl Node {
             pending_card: None,
             links: HashMap::new(),
             next_link: 0,
+            nearby: HashMap::new(),
+            nearby_arrivals: 0,
         })
     }
 
@@ -237,6 +268,29 @@ impl Node {
 
     pub fn create_identity(&mut self, now_secs: u64) -> CoreResult<()> {
         let identity = Identity::generate()?;
+        self.persist_identity_with(&identity, now_secs)?;
+        self.identity = Some(identity);
+        Ok(())
+    }
+
+    /// This phone's long-term keys for the platform store that survives an
+    /// uninstall (ADR-038). Secret: hosts must never log it.
+    pub fn identity_backup(&self) -> CoreResult<Zeroizing<Vec<u8>>> {
+        Ok(self
+            .identity
+            .as_ref()
+            .ok_or(CoreError::NoIdentity)?
+            .backup()?)
+    }
+
+    /// Brings back this phone's identity after a reinstall (ADR-038): same ID,
+    /// QR identity and safety numbers. Chats and sessions are not in the
+    /// backup, so contacts pair again once. Refused if an identity exists.
+    pub fn restore_identity(&mut self, backup: &[u8], now_secs: u64) -> CoreResult<()> {
+        if self.identity.is_some() {
+            return Err(CoreError::NotAllowed);
+        }
+        let identity = Identity::from_backup(backup)?;
         self.persist_identity_with(&identity, now_secs)?;
         self.identity = Some(identity);
         Ok(())
@@ -303,6 +357,8 @@ impl Node {
                 verified: c.verified,
                 blocked: c.blocked,
                 safety_number: safety_number(&my_fingerprint, &theirs.olm_fingerprint_key),
+                last_seen_secs: None,
+                introduced_by: None,
             });
         }
         let contact = Contact {
@@ -328,6 +384,8 @@ impl Node {
             verified: false,
             blocked: false,
             safety_number: safety_number(&my_fingerprint, &theirs.olm_fingerprint_key),
+            last_seen_secs: None,
+            introduced_by: None,
         })
     }
 
@@ -350,6 +408,7 @@ impl Node {
             .as_ref()
             .ok_or(CoreError::NoIdentity)?
             .fingerprint_key();
+        let seen = self.conv.last_seen_all()?;
         self.conv
             .contacts()?
             .into_iter()
@@ -363,6 +422,8 @@ impl Node {
                     verified: c.verified,
                     blocked: c.blocked,
                     safety_number: safety_number(&me, &card.olm_fingerprint_key),
+                    last_seen_secs: seen.get(&c.contact_id).copied(),
+                    introduced_by: self.introduced_by(&card.olm_fingerprint_key)?,
                 })
             })
             .collect()
@@ -840,6 +901,7 @@ impl Node {
             .conv
             .delete_contact(contact_id)?
             .ok_or(CoreError::UnknownContact)?;
+        self.nearby.remove(contact_id);
         Ok(self.relay.remove_contact(&contact_ref)?)
     }
 
@@ -894,6 +956,24 @@ impl Node {
 
     pub fn carry_cap(&self) -> u64 {
         u64::try_from(self.policy.carry_cap_bytes).unwrap_or(u64::MAX)
+    }
+
+    /// Seconds a phone waits after an exchange before syncing with the same
+    /// nearby phone again (ADR-032). User-set, 1 ..= 45, default 5.
+    pub fn resync_secs(&self) -> CoreResult<u32> {
+        let stored = self.conv.setting(RESYNC_SETTING)?;
+        Ok(stored
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(RESYNC_DEFAULT_SECS)
+            .clamp(RESYNC_MIN_SECS, RESYNC_MAX_SECS))
+    }
+
+    /// Stores the re-sync interval, clamped to 1 ..= 45 s; returns what was stored.
+    pub fn set_resync_secs(&mut self, secs: u32) -> CoreResult<u32> {
+        let v = secs.clamp(RESYNC_MIN_SECS, RESYNC_MAX_SECS);
+        self.conv
+            .set_setting(RESYNC_SETTING, Some(&v.to_string()))?;
+        Ok(v)
     }
 
     /// Sends an image (≤ 16 KiB, already re-encoded by the host) or a file
@@ -1173,6 +1253,9 @@ impl Node {
         }
         let keys = self.pair_keys(&contact_ref)?;
         let Ok(opened) = open_from(&keys, env) else {
+            // Forged or corrupted: don't let it occupy the envelope id, or a
+            // malicious relay could block the genuine copy as a "duplicate".
+            self.relay.forget_seen(&env.header.envelope_id)?;
             return Ok(false);
         };
         let params = SendParams {
@@ -1387,6 +1470,68 @@ impl Node {
                 self.on_group_text(contact, p, now_secs)?;
             }
             Content::GroupLeave { group_id } => self.on_group_leave(contact, group_id, now_secs)?,
+            Content::Location {
+                lat_e7,
+                lon_e7,
+                accuracy_m,
+                captured_ms,
+            } => self.on_location(
+                contact,
+                opened.inner.message_id,
+                sent_at_ms,
+                vl_store::LocationRow {
+                    lat_e7,
+                    lon_e7,
+                    accuracy_m,
+                    captured_ms,
+                },
+                now_secs,
+            )?,
+            Content::Poll {
+                group,
+                poll_id,
+                question,
+                options,
+                multi,
+            } => self.on_poll(
+                contact,
+                opened.inner.message_id,
+                sent_at_ms,
+                group,
+                poll_id,
+                vl_store::PollRow {
+                    question,
+                    options,
+                    multi,
+                },
+                now_secs,
+            )?,
+            Content::PollVote {
+                group,
+                poll_id,
+                choices,
+            } => {
+                self.on_poll_vote(contact, group, poll_id, choices, now_secs)?;
+            }
+            Content::IntroAsk {
+                intro_id,
+                other_fp,
+                other_name,
+            } => self.on_intro_ask(
+                contact,
+                opened.inner.message_id,
+                sent_at_ms,
+                intro_id,
+                other_fp,
+                other_name,
+                now_secs,
+            )?,
+            Content::IntroCard { intro_id, card } => {
+                self.on_intro_card(contact, intro_id, card, now_secs)?;
+            }
+            Content::IntroDeliver { intro_id, card } => {
+                self.on_intro_deliver(contact, intro_id, card, now_secs)?;
+            }
             Content::Attachment {
                 attachment_id,
                 kind,

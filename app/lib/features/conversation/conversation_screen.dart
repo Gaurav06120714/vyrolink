@@ -13,6 +13,8 @@ import '../../design/widgets/states.dart';
 import '../../util/format.dart';
 import '../chats/chats_screen.dart';
 import 'attachment_view.dart';
+import 'paper_screen.dart';
+import 'share_view.dart';
 import 'composer.dart';
 import 'message_list.dart';
 
@@ -164,7 +166,11 @@ class _ConversationScreenState extends State<ConversationScreen> with WidgetsBin
   }
 
   Future<void> _attach() async {
-    final picked = await pickAttachment(context);
+    final choice = await chooseShare(context);
+    if (choice == null || !mounted) return;
+    if (choice == shareLocation) return _shareLocation();
+    if (choice == sharePoll) return _sendPoll();
+    final picked = await pickAttachment(context, choice);
     if (picked == null) return;
     final (file, kind, caption) = picked;
     try {
@@ -178,6 +184,50 @@ class _ConversationScreenState extends State<ConversationScreen> with WidgetsBin
     } on VlFailure catch (e) {
       if (mounted) showMessage(context, e.message);
     }
+  }
+
+  /// ADR-034: one fix, only after the person confirms whom it goes to.
+  Future<void> _shareLocation() async {
+    final name = _contact?.displayName ?? widget.initialName;
+    final ok = await _confirmShare(name);
+    if (!ok || !mounted) return;
+    try {
+      final fix = await _s.call((api) => api.currentLocation());
+      if (!mounted) return;
+      if (fix == null) {
+        showMessage(context, 'Location is off or not allowed for VYRO LINK. Turn it on in Settings to share it.');
+        return;
+      }
+      await _s.mutate((api) => api.sendLocation(widget.contactId, fix));
+      HapticFeedback.lightImpact();
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+    } on VlFailure catch (e) {
+      if (mounted) showMessage(context, e.message);
+    }
+  }
+
+  Future<bool> _confirmShare(String name) async =>
+      await showAdaptiveDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog.adaptive(
+          title: Text('Share your location with $name?'),
+          content: const Text(
+            'Your current position is sent once, end-to-end encrypted. Phones that carry it cannot read it. '
+            'VYRO LINK does not track you or share it again.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Share')),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<void> _sendPoll() async {
+    final p = await composePoll(context);
+    if (p == null || !mounted) return;
+    await _run((api) => api.sendPoll(widget.contactId, p.question, p.options, p.multi));
+    if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
   }
 
   Message? _find(BubbleData b) => _messages.where((m) => idKey(m.messageId) == b.key).firstOrNull;
@@ -299,6 +349,20 @@ class _ConversationScreenState extends State<ConversationScreen> with WidgetsBin
                   },
                 ),
               ],
+              if (m.outgoing && !m.deleted && m.state != DeliveryState.delivered && m.attachment == null)
+                ListTile(
+                  leading: const Icon(Icons.qr_code_2_rounded),
+                  title: const Text('Show as QR code'),
+                  subtitle: const Text('For when Bluetooth can\'t reach them'),
+                  onTap: () {
+                    close();
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PaperScreen(messageId: m.messageId, recipient: name),
+                      ),
+                    );
+                  },
+                ),
               if (m.outgoing)
                 ListTile(
                   leading: const Icon(Icons.info_outline_rounded),

@@ -235,33 +235,51 @@ class _AttachmentViewState extends State<AttachmentView> {
   );
 }
 
-/// Picks a photo or file and confirms it (with an optional caption) before sending.
-Future<(PickedFile, int, String)?> pickAttachment(BuildContext context) async {
-  final s = context.services;
-  final kind = await showModalBottomSheet<int>(
-    context: context,
-    useSafeArea: true,
-    builder: (sheet) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+/// What the + button can send besides text.
+const shareLocation = 3;
+const sharePoll = 4;
+
+/// Photo, file, location (chats only) or poll.
+Future<int?> chooseShare(BuildContext context, {bool location = true}) => showModalBottomSheet<int>(
+  context: context,
+  useSafeArea: true,
+  builder: (sheet) => SafeArea(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.photo_outlined),
+          title: const Text('Photo'),
+          subtitle: const Text('Compressed to 16 KB so it can travel over Bluetooth'),
+          onTap: () => Navigator.pop(sheet, attachmentImage),
+        ),
+        ListTile(
+          leading: const Icon(Icons.description_outlined),
+          title: const Text('File'),
+          subtitle: const Text('Up to 64 KB'),
+          onTap: () => Navigator.pop(sheet, attachmentFile),
+        ),
+        if (location)
           ListTile(
-            leading: const Icon(Icons.photo_outlined),
-            title: const Text('Photo'),
-            subtitle: const Text('Compressed to 16 KB so it can travel over Bluetooth'),
-            onTap: () => Navigator.pop(sheet, attachmentImage),
+            leading: const Icon(Icons.location_on_outlined),
+            title: const Text('Location'),
+            subtitle: const Text('Your current position, once, encrypted'),
+            onTap: () => Navigator.pop(sheet, shareLocation),
           ),
-          ListTile(
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('File'),
-            subtitle: const Text('Up to 64 KB'),
-            onTap: () => Navigator.pop(sheet, attachmentFile),
-          ),
-        ],
-      ),
+        ListTile(
+          leading: const Icon(Icons.poll_outlined),
+          title: const Text('Poll'),
+          subtitle: const Text('A question with up to 10 answers'),
+          onTap: () => Navigator.pop(sheet, sharePoll),
+        ),
+      ],
     ),
-  );
-  if (kind == null || !context.mounted) return null;
+  ),
+);
+
+/// Picks a photo or file (`kind`) and confirms it (with an optional caption) before sending.
+Future<(PickedFile, int, String)?> pickAttachment(BuildContext context, int kind) async {
+  final s = context.services;
   PickedFile? picked;
   try {
     picked = await s.call((api) => kind == attachmentImage ? api.pickImage() : api.pickFile());

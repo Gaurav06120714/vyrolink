@@ -132,6 +132,20 @@ void main() {
     expect(host.calls.where((c) => c.startsWith('relay')), isEmpty);
   });
 
+  testWidgets('a reinstall that kept the ID says so and asks to scan codes again', (t) async {
+    final host = FakeHost()..restoreIdentity = true;
+    await t.pumpWidget(VyroApp(services: AppServices(host)));
+    await settle(t);
+    for (final label in ['Continue', 'Continue', 'Set up this phone']) {
+      await t.tap(find.text(label));
+      await settle(t);
+    }
+    await t.enterText(find.byType(TextField), 'Asha');
+    await t.tap(find.text('Create my identity'));
+    await settle(t);
+    expect(find.textContaining('kept your VYRO LINK ID'), findsOneWidget);
+  });
+
   testWidgets('identity creation failure is shown and does not advance', (t) async {
     final host = FakeHost()..failNext = PlatformException(code: 'KeyStore');
     await t.pumpWidget(VyroApp(services: AppServices(host)));

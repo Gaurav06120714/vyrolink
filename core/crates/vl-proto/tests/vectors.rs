@@ -54,6 +54,7 @@ fn valid() -> Vec<(&'static str, Vec<u8>)> {
                 relay_willing: true,
                 free_capacity_bucket: 128,
                 l2cap_psm: None,
+                features: 0,
             })
             .encode()
             .unwrap(),
@@ -90,6 +91,26 @@ fn valid() -> Vec<(&'static str, Vec<u8>)> {
             }])
             .encode()
             .unwrap(),
+        ),
+        (
+            "link_hello_features",
+            LinkMessage::Hello(Hello {
+                link_versions: vec![LINK_VERSION],
+                max_frame: MAX_FRAME_LEN as u16,
+                relay_class: RelayClass::AlwaysOn,
+                relay_willing: true,
+                free_capacity_bucket: 128,
+                l2cap_psm: None,
+                features: FEATURE_PRESENCE,
+            })
+            .encode()
+            .unwrap(),
+        ),
+        (
+            "link_presence",
+            LinkMessage::Presence(vec![[0x5A; 16], [0xA5; 16]])
+                .encode()
+                .unwrap(),
         ),
         (
             "link_envelope",
@@ -242,6 +263,11 @@ fn rejects() -> Vec<(&'static str, &'static str, Vec<u8>)> {
             "link_request_count_too_large",
             "TooManyItems",
             vec![0x03, 0xFF, 0xFF],
+        ),
+        (
+            "link_presence_count_too_large",
+            "TooManyItems",
+            vec![0x0A, 0x00, 0x81],
         ),
         (
             "link_ping_trailing",

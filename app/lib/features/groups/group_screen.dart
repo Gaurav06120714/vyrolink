@@ -10,6 +10,7 @@ import '../../design/widgets/states.dart';
 import '../chats/chats_screen.dart';
 import '../conversation/composer.dart';
 import '../conversation/message_list.dart';
+import '../conversation/share_view.dart';
 import 'new_group_screen.dart';
 
 /// A small group (ADR-024): pairwise copies to each member; delivery is shown
@@ -139,6 +140,17 @@ class _GroupScreenState extends State<GroupScreen> {
     builder: (sheet) => _GroupInfo(group: _group!, me: _me!),
   );
 
+  /// ADR-035: a poll goes to every member as its own encrypted copy.
+  Future<void> _poll() async {
+    final p = await composePoll(context);
+    if (p == null || !mounted) return;
+    try {
+      await context.services.mutate((api) => api.sendGroupPoll(widget.groupId, p.question, p.options, p.multi));
+    } on VlFailure catch (e) {
+      if (mounted) showMessage(context, e.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = VlColors.of(context);
@@ -163,6 +175,7 @@ class _GroupScreenState extends State<GroupScreen> {
           author: m.outgoing ? null : _author(m.authorFingerprint),
           status: m.outgoing ? status : null,
           replyTo: m.replyTo,
+          poll: m.poll,
         ),
     ];
     return Scaffold(
@@ -201,6 +214,8 @@ class _GroupScreenState extends State<GroupScreen> {
           ),
         ),
         actions: [
+          if (group != null && !group.left)
+            IconButton(tooltip: 'New poll', onPressed: _poll, icon: const Icon(Icons.poll_outlined)),
           if (group != null)
             IconButton(tooltip: 'Group details', onPressed: _info, icon: const Icon(Icons.info_outline_rounded)),
         ],

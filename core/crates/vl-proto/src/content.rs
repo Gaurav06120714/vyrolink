@@ -22,6 +22,12 @@ pub const MAX_FILE_BYTES: u32 = 64 * 1024;
 pub const CHUNK_BYTES: usize = 1400;
 pub const MAX_ATTACHMENT_NAME: usize = 64;
 pub const MAX_CAPTION_BYTES: usize = 1024;
+/// Poll limits (ADR-035).
+pub const MAX_POLL_OPTIONS: usize = 10;
+pub const MAX_POLL_QUESTION_BYTES: usize = 300;
+pub const MAX_POLL_OPTION_BYTES: usize = 100;
+const FLAG_GROUP: u8 = 0x04;
+const FLAG_MULTI: u8 = 0x08;
 
 /// Number of chunks an attachment of `total_len` bytes is split into.
 pub const fn chunk_count_for(total_len: u32) -> u32 {
@@ -37,6 +43,14 @@ const CT_GROUP_STATE: u8 = 0x06;
 const CT_GROUP_TEXT: u8 = 0x07;
 const CT_GROUP_LEAVE: u8 = 0x08;
 const CT_ATTACHMENT: u8 = 0x09;
+const CT_LOCATION: u8 = 0x0A;
+const CT_POLL: u8 = 0x0B;
+const CT_POLL_VOTE: u8 = 0x0C;
+const CT_INTRO_ASK: u8 = 0x0D;
+const CT_INTRO_CARD: u8 = 0x0E;
+const CT_INTRO_DELIVER: u8 = 0x0F;
+/// Largest pairing card carried in an introduction (ADR-037).
+pub const MAX_INTRO_CARD_BYTES: usize = 1024;
 
 const FLAG_REPLY: u8 = 0x01;
 const FLAG_FORWARDED: u8 = 0x02;
@@ -100,6 +114,91 @@ pub enum Content {
         name: String,
         caption: String,
     },
+    /// A one-off position shared on purpose by the sender (ADR-034).
+    /// Degrees × 10⁷ (WGS 84), accuracy in metres, time of the GPS fix.
+    Location {
+        lat_e7: i32,
+        lon_e7: i32,
+        accuracy_m: u16,
+        captured_ms: u64,
+    },
+    /// A poll (ADR-035). `poll_id` is the message id it is shown under: the
+    /// inner message id in a chat, the shared `group_msg_id` in a group.
+    Poll {
+        group: Option<GroupRef>,
+        poll_id: [u8; 16],
+        question: String,
+        options: Vec<String>,
+        multi: bool,
+    },
+    /// The sender's whole current choice for a poll (bit i = option i); 0 withdraws.
+    PollVote {
+        group: Option<GroupRef>,
+        poll_id: [u8; 16],
+        choices: u16,
+    },
+    /// Introductions (ADR-037). The introducer asks each side; each side that
+    /// accepts sends the introducer a fresh signed card; the introducer then
+    /// hands each side the other's card. `other_fp` names who the card must be.
+    IntroAsk {
+        intro_id: [u8; 16],
+        other_fp: [u8; 32],
+        other_name: String,
+    },
+    IntroCard {
+        intro_id: [u8; 16],
+        card: Vec<u8>,
+    },
+    IntroDeliver {
+        intro_id: [u8; 16],
+        card: Vec<u8>,
+    },
+}
+
+/// Group a poll or vote belongs to, and the roster epoch it was sent under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GroupRef {
+    pub group_id: [u8; 16],
+    pub epoch: u32,
+}
+
+fn check_location(lat_e7: i32, lon_e7: i32) -> Result<(), ProtoError> {
+    if !(-900_000_000..=900_000_000).contains(&lat_e7)
+        || !(-1_800_000_000..=1_800_000_000).contains(&lon_e7)
+    {
+        return Err(ProtoError::InvalidField("location"));
+    }
+    Ok(())
+}
+
+fn check_poll(question: &str, options: &[String]) -> Result<(), ProtoError> {
+    if question.trim().is_empty()
+        || question.len() > MAX_POLL_QUESTION_BYTES
+        || !(2..=MAX_POLL_OPTIONS).contains(&options.len())
+        || options
+            .iter()
+            .any(|o| o.trim().is_empty() || o.len() > MAX_POLL_OPTION_BYTES)
+    {
+        return Err(ProtoError::InvalidField("poll"));
+    }
+    Ok(())
+}
+
+fn put_group(out: &mut Vec<u8>, group: Option<&GroupRef>) {
+    if let Some(g) = group {
+        out.extend_from_slice(&g.group_id);
+        out.extend_from_slice(&g.epoch.to_be_bytes());
+    }
+}
+
+fn get_group(r: &mut Reader<'_>, flags: u8) -> Result<Option<GroupRef>, ProtoError> {
+    if flags & FLAG_GROUP == 0 {
+        return Ok(None);
+    }
+    Ok(Some(GroupRef {
+        group_id: r.array()?,
+        epoch: r.u32()?,
+    }))
 }
 
 /// Payload of an `AttachmentChunk` inner message: the attachment it belongs
@@ -334,6 +433,87 @@ impl Content {
                 out.extend_from_slice(name.as_bytes());
                 put_text(&mut out, caption)?;
             }
+            Self::Location {
+                lat_e7,
+                lon_e7,
+                accuracy_m,
+                captured_ms,
+            } => {
+                check_location(*lat_e7, *lon_e7)?;
+                out.push(CT_LOCATION);
+                out.extend_from_slice(&lat_e7.to_be_bytes());
+                out.extend_from_slice(&lon_e7.to_be_bytes());
+                out.extend_from_slice(&accuracy_m.to_be_bytes());
+                out.extend_from_slice(&captured_ms.to_be_bytes());
+            }
+            Self::Poll {
+                group,
+                poll_id,
+                question,
+                options,
+                multi,
+            } => {
+                check_poll(question, options)?;
+                out.push(CT_POLL);
+                let mut flags = 0;
+                if group.is_some() {
+                    flags |= FLAG_GROUP;
+                }
+                if *multi {
+                    flags |= FLAG_MULTI;
+                }
+                out.push(flags);
+                put_group(&mut out, group.as_ref());
+                out.extend_from_slice(poll_id);
+                put_text(&mut out, question)?;
+                out.push(u8::try_from(options.len()).map_err(|_| ProtoError::BadLength)?);
+                for o in options {
+                    out.push(u8::try_from(o.len()).map_err(|_| ProtoError::BadLength)?);
+                    out.extend_from_slice(o.as_bytes());
+                }
+            }
+            Self::IntroAsk {
+                intro_id,
+                other_fp,
+                other_name,
+            } => {
+                if other_name.len() > crate::MAX_NAME_LEN {
+                    return Err(ProtoError::InvalidField("intro name"));
+                }
+                out.push(CT_INTRO_ASK);
+                out.extend_from_slice(intro_id);
+                out.extend_from_slice(other_fp);
+                out.push(u8::try_from(other_name.len()).map_err(|_| ProtoError::BadLength)?);
+                out.extend_from_slice(other_name.as_bytes());
+            }
+            Self::IntroCard { intro_id, card } | Self::IntroDeliver { intro_id, card } => {
+                if card.is_empty() || card.len() > MAX_INTRO_CARD_BYTES {
+                    return Err(ProtoError::InvalidField("intro card"));
+                }
+                out.push(if matches!(self, Self::IntroCard { .. }) {
+                    CT_INTRO_CARD
+                } else {
+                    CT_INTRO_DELIVER
+                });
+                out.extend_from_slice(intro_id);
+                out.extend_from_slice(
+                    &u16::try_from(card.len())
+                        .map_err(|_| ProtoError::BadLength)?
+                        .to_be_bytes(),
+                );
+                out.extend_from_slice(card);
+            }
+            Self::PollVote {
+                group,
+                poll_id,
+                choices,
+            } => {
+                out.push(CT_POLL_VOTE);
+                out.push(if group.is_some() { FLAG_GROUP } else { 0 });
+                put_group(&mut out, group.as_ref());
+                out.extend_from_slice(poll_id);
+                out.extend_from_slice(&choices.to_be_bytes());
+            }
         }
         Ok(out)
     }
@@ -469,6 +649,89 @@ impl Content {
                     reply_to,
                     name,
                     caption,
+                }
+            }
+            CT_LOCATION => {
+                let lat_e7 = i32::from_be_bytes(r.array()?);
+                let lon_e7 = i32::from_be_bytes(r.array()?);
+                let accuracy_m = r.u16()?;
+                let captured_ms = r.u64()?;
+                check_location(lat_e7, lon_e7)?;
+                Self::Location {
+                    lat_e7,
+                    lon_e7,
+                    accuracy_m,
+                    captured_ms,
+                }
+            }
+            CT_POLL => {
+                let flags = r.u8()?;
+                if flags & !(FLAG_GROUP | FLAG_MULTI) != 0 {
+                    return Err(ProtoError::ReservedBitsSet);
+                }
+                let group = get_group(&mut r, flags)?;
+                let poll_id = r.array()?;
+                let question = get_text(&mut r)?;
+                let n = usize::from(r.u8()?);
+                if n > MAX_POLL_OPTIONS {
+                    return Err(ProtoError::InvalidField("poll"));
+                }
+                let mut options = Vec::with_capacity(n);
+                for _ in 0..n {
+                    let len = usize::from(r.u8()?);
+                    options.push(
+                        String::from_utf8(r.take(len)?.to_vec())
+                            .map_err(|_| ProtoError::InvalidField("utf8"))?,
+                    );
+                }
+                let multi = flags & FLAG_MULTI != 0;
+                check_poll(&question, &options)?;
+                Self::Poll {
+                    group,
+                    poll_id,
+                    question,
+                    options,
+                    multi,
+                }
+            }
+            CT_POLL_VOTE => {
+                let flags = r.u8()?;
+                if flags & !FLAG_GROUP != 0 {
+                    return Err(ProtoError::ReservedBitsSet);
+                }
+                let group = get_group(&mut r, flags)?;
+                Self::PollVote {
+                    group,
+                    poll_id: r.array()?,
+                    choices: r.u16()?,
+                }
+            }
+            CT_INTRO_ASK => {
+                let intro_id = r.array()?;
+                let other_fp = r.array()?;
+                let n = usize::from(r.u8()?);
+                if n > crate::MAX_NAME_LEN {
+                    return Err(ProtoError::InvalidField("intro name"));
+                }
+                let other_name = String::from_utf8(r.take(n)?.to_vec())
+                    .map_err(|_| ProtoError::InvalidField("utf8"))?;
+                Self::IntroAsk {
+                    intro_id,
+                    other_fp,
+                    other_name,
+                }
+            }
+            kind @ (CT_INTRO_CARD | CT_INTRO_DELIVER) => {
+                let intro_id = r.array()?;
+                let n = usize::from(r.u16()?);
+                if n == 0 || n > MAX_INTRO_CARD_BYTES {
+                    return Err(ProtoError::InvalidField("intro card"));
+                }
+                let card = r.take(n)?.to_vec();
+                if kind == CT_INTRO_CARD {
+                    Self::IntroCard { intro_id, card }
+                } else {
+                    Self::IntroDeliver { intro_id, card }
                 }
             }
             other => return Err(ProtoError::UnknownType(other)),
@@ -704,6 +967,111 @@ mod tests {
             Content::decode(&[2, CT_DELETE]),
             Err(ProtoError::UnsupportedVersion(2))
         );
+    }
+
+    #[test]
+    fn introductions_round_trip_and_enforce_limits() {
+        let ask = Content::IntroAsk {
+            intro_id: [1; 16],
+            other_fp: [2; 32],
+            other_name: "Ravi".into(),
+        };
+        assert_eq!(Content::decode(&ask.encode().unwrap()).unwrap(), ask);
+        let card = Content::IntroCard {
+            intro_id: [1; 16],
+            card: vec![9; 300],
+        };
+        assert_eq!(Content::decode(&card.encode().unwrap()).unwrap(), card);
+        let deliver = Content::IntroDeliver {
+            intro_id: [1; 16],
+            card: vec![8; 300],
+        };
+        assert_eq!(
+            Content::decode(&deliver.encode().unwrap()).unwrap(),
+            deliver
+        );
+        assert!(
+            Content::IntroCard {
+                intro_id: [1; 16],
+                card: vec![]
+            }
+            .encode()
+            .is_err()
+        );
+        assert!(
+            Content::IntroCard {
+                intro_id: [1; 16],
+                card: vec![0; MAX_INTRO_CARD_BYTES + 1]
+            }
+            .encode()
+            .is_err()
+        );
+        let long = Content::IntroAsk {
+            intro_id: [1; 16],
+            other_fp: [2; 32],
+            other_name: "x".repeat(200),
+        };
+        assert!(long.encode().is_err());
+    }
+
+    #[test]
+    fn location_and_polls_round_trip_and_enforce_limits() {
+        let loc = Content::Location {
+            lat_e7: 174_123_456,
+            lon_e7: 785_123_456,
+            accuracy_m: 12,
+            captured_ms: 1_790_000_000_000,
+        };
+        assert_eq!(Content::decode(&loc.encode().unwrap()).unwrap(), loc);
+        let bad = Content::Location {
+            lat_e7: 900_000_001,
+            lon_e7: 0,
+            accuracy_m: 0,
+            captured_ms: 0,
+        };
+        assert!(bad.encode().is_err());
+
+        let group = Some(GroupRef {
+            group_id: [3; 16],
+            epoch: 2,
+        });
+        let poll = Content::Poll {
+            group,
+            poll_id: [7; 16],
+            question: "Where do we meet?".into(),
+            options: vec!["North gate".into(), "Library".into()],
+            multi: true,
+        };
+        assert_eq!(Content::decode(&poll.encode().unwrap()).unwrap(), poll);
+        let vote = Content::PollVote {
+            group: None,
+            poll_id: [7; 16],
+            choices: 0b10,
+        };
+        assert_eq!(Content::decode(&vote.encode().unwrap()).unwrap(), vote);
+
+        let poll_with = |q: &str, opts: Vec<&str>| Content::Poll {
+            group: None,
+            poll_id: [1; 16],
+            question: q.into(),
+            options: opts.into_iter().map(String::from).collect(),
+            multi: false,
+        };
+        assert!(
+            poll_with("Q", vec!["only one"]).encode().is_err(),
+            "needs two options"
+        );
+        assert!(
+            poll_with("Q", vec!["a"; MAX_POLL_OPTIONS + 1])
+                .encode()
+                .is_err()
+        );
+        assert!(
+            poll_with(" ", vec!["a", "b"]).encode().is_err(),
+            "empty question"
+        );
+        let long = "x".repeat(MAX_POLL_OPTION_BYTES + 1);
+        assert!(poll_with("Q", vec!["a", &long]).encode().is_err());
     }
 
     #[test]

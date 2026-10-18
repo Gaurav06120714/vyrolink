@@ -89,6 +89,7 @@ final class NodeHost: VlHostApi {
   func start() throws -> StartupInfo {
     do {
       let n = try open()
+      if n.hasIdentity(), let b = try? n.identityBackup() { try? KeyStore.saveIdentityBackup(b) }
       if n.hasIdentity(), (try? n.setting(key: Self.relaySetting)).flatMap({ $0 }) == "1" {
         relay?.setEnabled(true)
       }
@@ -97,8 +98,25 @@ final class NodeHost: VlHostApi {
     } catch { throw Self.map(error) }
   }
 
-  func createIdentity() throws { try run { try $0.createIdentity(nowSecs: now()) } }
+  func createIdentity() throws -> Bool {
+    try run { n in
+      if let b = KeyStore.identityBackup(), (try? n.restoreIdentity(backup: b, nowSecs: now())) != nil {
+        return true
+      }
+      try n.createIdentity(nowSecs: now())
+      try KeyStore.saveIdentityBackup(try n.identityBackup())
+      return false
+    }
+  }
   func myFingerprint() throws -> FlutterStandardTypedData { try run { bytes(try $0.myFingerprint()) } }
+  func internetOutbox() throws -> [FlutterStandardTypedData] { try run { try $0.internetOutbox(nowSecs: now()).map(bytes) } }
+  func internetUploaded(envelopes: [FlutterStandardTypedData]) throws {
+    try run { try $0.internetUploaded(envelopes: envelopes.map(\.data), nowSecs: now()) }
+  }
+  func internetTags() throws -> [FlutterStandardTypedData] { try run { try $0.internetTags().map(bytes) } }
+  func receiveInternet(envelope: FlutterStandardTypedData) throws -> Bool {
+    try run { try $0.receiveInternet(envelope: envelope.data, nowSecs: now()) }
+  }
   func setting(key: String) throws -> String? { try run { try $0.setting(key: key) } }
   func setSetting(key: String, value: String?) throws { try run { try $0.setSetting(key: key, value: value) } }
   func maintain() throws { try run { try $0.maintain(nowSecs: now()) } }
@@ -355,6 +373,42 @@ final class NodeHost: VlHostApi {
 
   // MARK: Bluetooth, permissions
 
+  func introduce(contactA: FlutterStandardTypedData, contactB: FlutterStandardTypedData) throws
+    -> FlutterStandardTypedData
+  {
+    try run { bytes(try $0.introduce(a: contactA.data, b: contactB.data, nowSecs: now())) }
+  }
+
+  func acceptIntro(introId: FlutterStandardTypedData, myName: String) throws {
+    try run { try $0.acceptIntro(introId: introId.data, myName: myName, nowSecs: now()) }
+  }
+
+  func declineIntro(introId: FlutterStandardTypedData) throws {
+    try run { try $0.declineIntro(introId: introId.data) }
+  }
+
+  func paperMessage(messageId: FlutterStandardTypedData) throws -> String {
+    try run { try $0.paperMessage(messageId: messageId.data) }
+  }
+
+  func receivePaper(code: String) throws -> FlutterStandardTypedData {
+    try run { bytes(try $0.receivePaper(code: code, nowSecs: now())) }
+  }
+
+  func resyncSecs() throws -> Int64 { (try? run { Int64($0.resyncSecs()) }) ?? 5 }
+
+  func setResyncSecs(secs: Int64) throws -> Int64 {
+    try run { Int64(try $0.setResyncSecs(secs: UInt32(min(max(secs, 1), 45)))) }
+  }
+
+  func nearbyContacts(withinSecs: Int64) throws -> [NearbyContact] {
+    try run { n in
+      try n.nearbyContacts(nowSecs: now(), withinSecs: UInt64(max(0, withinSecs))).map {
+        NearbyContact(contactId: bytes($0.contactId), seenSecs: Int64($0.seenSecs))
+      }
+    }
+  }
+
   func networkStatus() throws -> NetworkStatus {
     guard let relay else { throw PigeonError(code: "Bluetooth", message: "relay not set up", details: nil) }
     return relay.status()
@@ -375,6 +429,48 @@ final class NodeHost: VlHostApi {
     return granted ? .granted : .denied
   }
 
+  func currentLocation() async throws -> LocationInfo? { await LocationFetcher.shared.fix() }
+
+  func sendLocation(contactId: FlutterStandardTypedData, fix: LocationInfo) throws -> FlutterStandardTypedData {
+    try run {
+      bytes(
+        try $0.sendLocation(
+          contactId: contactId.data, latE7: Int32(clamping: fix.latE7), lonE7: Int32(clamping: fix.lonE7),
+          accuracyM: UInt16(clamping: fix.accuracyM), capturedMs: UInt64(clamping: fix.capturedMs), nowSecs: now()))
+    }
+  }
+
+  func openMap(latE7: Int64, lonE7: Int64, label: String) throws {
+    let lat = Double(latE7) / 1e7
+    let lon = Double(lonE7) / 1e7
+    var c = URLComponents(string: "maps://")
+    c?.queryItems = [URLQueryItem(name: "ll", value: "\(lat),\(lon)"), URLQueryItem(name: "q", value: label)]
+    DispatchQueue.main.async {
+      if let url = c?.url { UIApplication.shared.open(url) }
+    }
+  }
+
+  func sendPoll(contactId: FlutterStandardTypedData, question: String, options: [String], multi: Bool) throws
+    -> FlutterStandardTypedData
+  {
+    try run {
+      bytes(try $0.sendPoll(contactId: contactId.data, question: question, options: options, multi: multi, nowSecs: now()))
+    }
+  }
+
+  func sendGroupPoll(groupId: FlutterStandardTypedData, question: String, options: [String], multi: Bool) throws
+    -> FlutterStandardTypedData
+  {
+    try run {
+      bytes(
+        try $0.sendGroupPoll(groupId: groupId.data, question: question, options: options, multi: multi, nowSecs: now()))
+    }
+  }
+
+  func vote(pollId: FlutterStandardTypedData, choices: Int64) throws {
+    try run { try $0.vote(pollId: pollId.data, choices: UInt16(clamping: choices), nowSecs: now()) }
+  }
+
   func openAppSettings() throws {
     DispatchQueue.main.async {
       if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -393,6 +489,15 @@ final class NodeHost: VlHostApi {
         peer = p
         return Contact(contact)
       } catch { throw Self.map(error) }
+    #else
+      throw PigeonError(code: "NotAvailable", message: "debug builds only", details: nil)
+    #endif
+  }
+
+  func debugPeerSendFile(name: String, data: FlutterStandardTypedData) throws {
+    #if DEBUG
+      guard let peer else { throw PigeonError(code: "NotAvailable", message: "create a peer first", details: nil) }
+      do { try peer.sendFile(name, data.data) } catch { throw Self.map(error) }
     #else
       throw PigeonError(code: "NotAvailable", message: "debug builds only", details: nil)
     #endif
@@ -441,7 +546,7 @@ extension Contact {
     self.init(
       contactId: bytes(c.contactId), displayName: c.displayName, fingerprint: bytes(c.fingerprint),
       idCode: c.idCode, verified: c.verified, blocked: c.blocked,
-      safetyNumber: c.safetyNumber)
+      safetyNumber: c.safetyNumber, lastSeenSecs: c.lastSeenSecs, introducedBy: c.introducedBy)
   }
 }
 
@@ -455,7 +560,21 @@ extension Message {
         AttachmentInfo(
           kind: Int64($0.kind), name: $0.name, totalLen: Int64($0.totalLen), chunkCount: Int64($0.chunkCount),
           receivedChunks: Int64($0.receivedChunks), complete: $0.complete, deliveredChunks: Int64($0.deliveredChunks))
-      })
+      },
+      location: m.location.map {
+        LocationInfo(
+          latE7: Int64($0.latE7), lonE7: Int64($0.lonE7), accuracyM: Int64($0.accuracyM), capturedMs: Int64($0.capturedMs))
+      },
+      poll: m.poll.map(PollInfo.init),
+      intro: m.intro.map { IntroInfo(introId: bytes($0.introId), otherName: $0.otherName, state: Int64($0.state)) })
+  }
+}
+
+extension PollInfo {
+  init(_ p: VlCore.PollInfo) {
+    self.init(
+      question: p.question, options: p.options, multi: p.multi, counts: p.counts.map(Int64.init),
+      mine: Int64(p.mine), voters: Int64(p.voters))
   }
 }
 
@@ -471,6 +590,6 @@ extension GroupMessage {
   init(_ m: VlCore.GroupMessage) {
     self.init(
       groupMsgId: bytes(m.groupMsgId), authorFingerprint: bytes(m.authorFingerprint), outgoing: m.outgoing,
-      body: m.body, replyTo: m.replyTo.map(bytes), createdAtSecs: m.createdAtSecs)
+      body: m.body, replyTo: m.replyTo.map(bytes), createdAtSecs: m.createdAtSecs, poll: m.poll.map(PollInfo.init))
   }
 }

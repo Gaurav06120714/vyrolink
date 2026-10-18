@@ -6,6 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:vl_host/vl_host.dart';
 
 import 'failure.dart';
+import 'google_account.dart';
+import 'internet.dart';
 
 /// Everything screens need: the typed native host, change notifications and
 /// the network status stream. One instance per app; tests pass a fake host.
@@ -14,11 +16,18 @@ class AppServices implements VlEventsApi {
 
   final VlHostApi api;
 
+  /// Optional internet mailbox (ADR-039); started by the root gate when on.
+  late final internet = InternetSync(api, onNewMail: bump);
+
   /// Bumped whenever stored data may have changed (local edits or a Bluetooth
   /// exchange). Live views reload when it changes.
   final changes = ValueNotifier<int>(0);
   final network = ValueNotifier<NetworkStatus?>(null);
   final appLock = ValueNotifier<bool>(false);
+
+  /// Contact [idKey] → unix seconds last seen in Bluetooth range (ADR-029).
+  /// Refreshed with the network status; the hosts keep it in memory only.
+  final nearby = ValueNotifier<Map<String, int>>(const {});
   final _scans = StreamController<String>.broadcast();
 
   StartupInfo startup = StartupInfo(hasIdentity: false, maxTextBytes: 1700, reactions: const []);
@@ -60,13 +69,33 @@ class AppServices implements VlEventsApi {
     }
   }
 
+  /// Erases everything. Google's SDK keeps its own session outside our
+  /// databases, so sign out of it first (ADR-030).
+  Future<void> panicWipe() async {
+    internet.stop();
+    await GoogleAccount.signOut();
+    await call((api) => api.panicWipe());
+  }
+
   Future<void> refreshNetwork() async {
     try {
       network.value = await api.networkStatus();
+      final seen = await api.nearbyContacts(nearbyWindowSecs);
+      final next = {for (final n in seen) idKey(n.contactId): n.seenSecs};
+      if (!mapEquals(next, nearby.value)) nearby.value = next;
     } on PlatformException {
       // The relay is not set up yet; the network screen shows "unknown".
     }
   }
+
+  /// Starts or stops the internet mailbox from the saved setting.
+  Future<void> applyInternet() async {
+    final on = startup.hasIdentity && await call((api) => api.setting(InternetSync.enabledKey)) == '1';
+    on ? internet.start() : internet.stop();
+  }
+
+  /// A contact counts as nearby for this long after the last link that showed them.
+  static const nearbyWindowSecs = 10 * 60;
 
   static const profileNameKey = 'profile.name';
   static const appLockKey = 'privacy.app_lock';

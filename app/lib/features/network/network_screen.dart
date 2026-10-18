@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:vl_host/vl_host.dart';
 
 import '../../app/failure.dart';
+import '../../app/internet.dart';
 import '../../app/routes.dart';
 import '../../app/services.dart';
 import '../../design/tokens.dart';
@@ -115,7 +116,7 @@ class NetworkScreen extends StatelessWidget {
                         value: (n?.advertising ?? false) ? 'Yes' : 'No',
                       ),
                     ],
-                    footer: 'VYRO LINK never shows who is nearby. Phones advertise only a fixed VYRO LINK signal with no name or identity.',
+                    footer: 'Strangers never learn who you are. Phones advertise only a fixed VYRO LINK signal with no name or identity; only people you paired with can see that you are nearby.',
                   ),
                   const SectionHeader('Messages on this phone'),
                   Section(
@@ -172,9 +173,12 @@ class NetworkScreen extends StatelessWidget {
                         icon: Icons.schedule_rounded,
                         text: 'Delivery depends on people meeting. A message can take minutes or days, and it expires after about a week.',
                       ),
-                      const _Note(
-                        icon: Icons.wifi_off_rounded,
-                        text: 'No internet is used. Being offline is normal here.',
+                      _Note(
+                        icon: s.internet.running ? Icons.cloud_sync_rounded : Icons.wifi_off_rounded,
+                        text: s.internet.running
+                            ? 'The internet mailbox is on, so mail also moves when either phone has a connection. '
+                                  'Bluetooth keeps working without it.'
+                            : 'No internet is used. Being offline is normal here.',
                       ),
                     ],
                   ),
@@ -234,13 +238,29 @@ class RelaySettingsScreen extends StatefulWidget {
 
 class _RelaySettingsScreenState extends State<RelaySettingsScreen> {
   double? _capMb;
+  double? _resync;
+  bool? _internet;
 
   @override
   void initState() {
     super.initState();
-    context.services.call((api) => api.carryCapMb()).then((mb) {
+    final s = context.services;
+    s.call((api) => api.carryCapMb()).then((mb) {
       if (mounted) setState(() => _capMb = mb.toDouble());
     }).ignore();
+    s.call((api) => api.resyncSecs()).then((v) {
+      if (mounted) setState(() => _resync = v.toDouble());
+    }).ignore();
+    s.call((api) => api.setting(InternetSync.enabledKey)).then((v) {
+      if (mounted) setState(() => _internet = v == '1');
+    }).ignore();
+  }
+
+  Future<void> _setInternet(bool on) async {
+    final s = context.services;
+    setState(() => _internet = on);
+    await s.call((api) => api.setSetting(InternetSync.enabledKey, on ? '1' : null));
+    await s.applyInternet();
   }
 
   Future<void> _mode(int mode) async {
@@ -294,6 +314,59 @@ class _RelaySettingsScreenState extends State<RelaySettingsScreen> {
                   style: t.bodySmall,
                 ),
               ),
+              const SectionHeader('Re-sync with nearby phones'),
+              if (_resync != null) ...[
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: Space.gutter(context) - Space.s),
+                  child: Slider.adaptive(
+                    min: 1,
+                    max: 45,
+                    divisions: 44,
+                    value: _resync!.clamp(1, 45),
+                    label: '${_resync!.round()} s',
+                    semanticFormatterCallback: (v) => v.round() == 1 ? 'every second' : 'every ${v.round()} seconds',
+                    onChanged: (v) => setState(() => _resync = v),
+                    onChangeEnd: (v) => s.call((api) => api.setResyncSecs(v.round())),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: Space.gutter(context)),
+                  child: Text(
+                    'Every ${_resync!.round()} s this phone swaps sealed mail again with phones that are still nearby, so messages it '
+                    'carries move on quickly. Shorter is faster but uses more battery. New messages you write go out at once either way.',
+                    style: t.bodySmall,
+                  ),
+                ),
+              ],
+              const SectionHeader('Internet'),
+              if (_internet != null)
+                SwitchListTile.adaptive(
+                  title: const Text('Use internet when available'),
+                  subtitle: const Text(
+                    'Also passes sealed mail through the VYRO LINK mailbox, so messages get through when '
+                    'either phone has a connection. The mailbox cannot read them, but it sees when this '
+                    'phone connects. Off: Bluetooth only, no internet at all.',
+                  ),
+                  value: _internet!,
+                  onChanged: _setInternet,
+                ),
+              if (_internet == true)
+                ValueListenableBuilder<String?>(
+                  valueListenable: s.internet.lastError,
+                  builder: (context, err, _) => ValueListenableBuilder<DateTime?>(
+                    valueListenable: s.internet.lastOk,
+                    builder: (context, ok, _) => Padding(
+                      padding: EdgeInsets.symmetric(horizontal: Space.gutter(context)),
+                      child: Text(
+                        err ??
+                            (ok == null
+                                ? 'Connecting to the mailbox…'
+                                : 'Mailbox reached at ${TimeOfDay.fromDateTime(ok).format(context)}'),
+                        style: t.bodySmall,
+                      ),
+                    ),
+                  ),
+                ),
               const SectionHeader('Storage for others\' mail'),
               if (_capMb != null) ...[
                 Padding(

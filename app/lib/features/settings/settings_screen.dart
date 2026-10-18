@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:vl_host/vl_host.dart';
 
 import '../../app/failure.dart';
+import '../../app/google_account.dart';
 import '../../app/routes.dart';
 import '../../app/services.dart';
 import '../../design/tokens.dart';
@@ -20,6 +21,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   PermissionState? _camera;
   Uint8List? _fingerprint;
+  String? _googleEmail;
 
   @override
   void initState() {
@@ -32,10 +34,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final camera = await s.call((api) => api.cameraPermission());
       final fp = await s.call((api) => api.myFingerprint());
+      final google = await s.call((api) => api.setting(GoogleAccount.emailKey));
       if (mounted) {
         setState(() {
           _camera = camera;
           _fingerprint = fp;
+          _googleEmail = google;
         });
       }
     } on VlFailure {
@@ -43,35 +47,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _editName() async {
+  Future<void> _google() async {
     final s = context.services;
-    final controller = TextEditingController(text: s.profileName);
-    final name = await showAdaptiveDialog<String>(
-      context: context,
-      builder: (d) => AlertDialog(
-        title: const Text('Your name'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 32,
-              textCapitalization: TextCapitalization.words,
-            ),
-            Text(
-              'Used in codes you show from now on. People you already paired with keep the name they saw.',
-              style: Theme.of(d).textTheme.bodySmall,
-            ),
+    if (_googleEmail != null) {
+      final ok = await showAdaptiveDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog.adaptive(
+          title: const Text('Sign out of Google?'),
+          content: const Text('Your Google name and email are removed from this phone. Your chats and ID stay.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(d, true), child: const Text('Sign out')),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(d, controller.text.trim()), child: const Text('Save')),
-        ],
-      ),
+      );
+      if (ok != true) return;
+      await GoogleAccount.signOut();
+      await s.mutate((api) async {
+        await api.setSetting(GoogleAccount.emailKey, null);
+        await api.setSetting(GoogleAccount.nameKey, null);
+      });
+      if (mounted) setState(() => _googleEmail = null);
+      return;
+    }
+    try {
+      final g = await GoogleAccount.signIn();
+      if (g == null) return;
+      await s.mutate((api) async {
+        await api.setSetting(GoogleAccount.emailKey, g.email);
+        await api.setSetting(GoogleAccount.nameKey, g.name);
+      });
+      if (mounted) setState(() => _googleEmail = g.email);
+    } on GoogleAccountFailure catch (e) {
+      if (mounted) showMessage(context, e.message);
+    } on VlFailure catch (e) {
+      if (mounted) showMessage(context, e.message);
+    }
+  }
+
+  Future<void> _editName() async {
+    final s = context.services;
+    final name = await askName(
+      context,
+      title: 'Your name',
+      initial: s.profileName,
+      note: 'Used in codes you show from now on. People you already paired with keep the name they saw.',
     );
-    controller.dispose();
     if (name == null) return;
     await s.call((api) => api.setSetting(AppServices.profileNameKey, name));
     setState(() => s.profileName = name);
@@ -124,6 +145,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: const Text('Your unique 32-character code and its QR'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => Routes.myId(context),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.account_circle_outlined),
+                    title: Text(_googleEmail ?? 'Sign in with Google'),
+                    subtitle: Text(
+                      _googleEmail == null
+                          ? 'Optional. VYRO LINK works fully without it.'
+                          : 'Google account · kept on this phone only',
+                    ),
+                    trailing: _googleEmail == null ? const Icon(Icons.chevron_right_rounded) : const Text('Sign out'),
+                    onTap: _google,
                   ),
                 ],
               ),
@@ -181,8 +213,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
                 footer:
-                    'VYRO LINK never asks for location, contacts, microphone or your photo library. '
-                    'The photo picker only hands over the one photo you choose.',
+                    'VYRO LINK never asks for your contacts, microphone or photo library. It asks for location only '
+                    'when you tap Share location, and sends it once, encrypted. The photo picker hands over only the '
+                    'photo you choose.',
               ),
               const SectionHeader('Privacy and security'),
               Section(

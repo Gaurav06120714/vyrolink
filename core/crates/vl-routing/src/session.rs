@@ -104,6 +104,8 @@ impl LinkSession {
             relay_willing: self.carries(),
             free_capacity_bucket: u8::try_from(bucket).unwrap_or(u8::MAX),
             l2cap_psm: None,
+            // The node adds FEATURE_PRESENCE; routing has no optional features.
+            features: 0,
         })])
     }
 
@@ -204,6 +206,8 @@ impl LinkSession {
             LinkMessage::Custody(items) => self.on_custody(&items, store, events)?,
             LinkMessage::Ping(t) => out.push(LinkMessage::Pong(t)),
             LinkMessage::Pong(_) => {}
+            // Contact presence (ADR-029) belongs to the node, not to routing.
+            LinkMessage::Presence(_) => {}
             LinkMessage::Bye(_) => {
                 self.closed = true;
                 events.push(Event::Closed);

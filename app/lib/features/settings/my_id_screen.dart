@@ -82,7 +82,11 @@ class MyIdScreen extends StatelessWidget {
                 style: t.bodySmall,
               ),
               const SizedBox(height: Space.m),
-              Text('Panic wipe or reinstalling creates a new identity and therefore a new ID.', style: t.bodySmall),
+              Text(
+                'Reinstalling VYRO LINK on this phone keeps this ID. Panic wipe erases it for good, '
+                'and the next setup creates a new one.',
+                style: t.bodySmall,
+              ),
             ],
           );
         },

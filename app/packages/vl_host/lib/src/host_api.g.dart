@@ -136,6 +136,59 @@ enum PermissionState {
   restricted;
 }
 
+/// A paired contact proven to be in Bluetooth range (ADR-029). The hosts keep
+/// it in memory only; it is never stored.
+class NearbyContact {
+  NearbyContact({
+    required this.contactId,
+    required this.seenSecs,
+  });
+
+  Uint8List contactId;
+
+  /// Unix seconds of the last link that showed this contact's presence tag.
+  int seenSecs;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      contactId,
+      seenSecs,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static NearbyContact decode(Object result) {
+    result as List<Object?>;
+    return NearbyContact(
+      contactId: result[0]! as Uint8List,
+      seenSecs: result[1]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NearbyContact || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(contactId, other.contactId) && _deepEquals(seenSecs, other.seenSecs);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'NearbyContact(contactId: $contactId, seenSecs: $seenSecs)';
+  }
+}
+
 class StartupInfo {
   StartupInfo({
     required this.hasIdentity,
@@ -200,6 +253,8 @@ class Contact {
     required this.verified,
     required this.blocked,
     required this.safetyNumber,
+    this.lastSeenSecs,
+    this.introducedBy,
   });
 
   Uint8List contactId;
@@ -217,6 +272,12 @@ class Contact {
 
   String safetyNumber;
 
+  /// Unix seconds this contact was last proven nearby over Bluetooth (ADR-033).
+  int? lastSeenSecs;
+
+  /// Who introduced this contact (ADR-037); null if met in person.
+  String? introducedBy;
+
   List<Object?> _toList() {
     return <Object?>[
       contactId,
@@ -226,6 +287,8 @@ class Contact {
       verified,
       blocked,
       safetyNumber,
+      lastSeenSecs,
+      introducedBy,
     ];
   }
 
@@ -242,6 +305,8 @@ class Contact {
       verified: result[4]! as bool,
       blocked: result[5]! as bool,
       safetyNumber: result[6]! as String,
+      lastSeenSecs: result[7] as int?,
+      introducedBy: result[8] as String?,
     );
   }
 
@@ -254,7 +319,7 @@ class Contact {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(contactId, other.contactId) && _deepEquals(displayName, other.displayName) && _deepEquals(fingerprint, other.fingerprint) && _deepEquals(idCode, other.idCode) && _deepEquals(verified, other.verified) && _deepEquals(blocked, other.blocked) && _deepEquals(safetyNumber, other.safetyNumber);
+    return _deepEquals(contactId, other.contactId) && _deepEquals(displayName, other.displayName) && _deepEquals(fingerprint, other.fingerprint) && _deepEquals(idCode, other.idCode) && _deepEquals(verified, other.verified) && _deepEquals(blocked, other.blocked) && _deepEquals(safetyNumber, other.safetyNumber) && _deepEquals(lastSeenSecs, other.lastSeenSecs) && _deepEquals(introducedBy, other.introducedBy);
   }
 
   @override
@@ -263,7 +328,7 @@ class Contact {
 
   @override
   String toString() {
-    return 'Contact(contactId: $contactId, displayName: $displayName, fingerprint: $fingerprint, idCode: $idCode, verified: $verified, blocked: $blocked, safetyNumber: $safetyNumber)';
+    return 'Contact(contactId: $contactId, displayName: $displayName, fingerprint: $fingerprint, idCode: $idCode, verified: $verified, blocked: $blocked, safetyNumber: $safetyNumber, lastSeenSecs: $lastSeenSecs, introducedBy: $introducedBy)';
   }
 }
 
@@ -283,6 +348,9 @@ class Message {
     required this.pinned,
     required this.starred,
     this.attachment,
+    this.location,
+    this.poll,
+    this.intro,
   });
 
   Uint8List messageId;
@@ -313,6 +381,12 @@ class Message {
 
   AttachmentInfo? attachment;
 
+  LocationInfo? location;
+
+  PollInfo? poll;
+
+  IntroInfo? intro;
+
   List<Object?> _toList() {
     return <Object?>[
       messageId,
@@ -329,6 +403,9 @@ class Message {
       pinned,
       starred,
       attachment,
+      location,
+      poll,
+      intro,
     ];
   }
 
@@ -352,6 +429,9 @@ class Message {
       pinned: result[11]! as bool,
       starred: result[12]! as bool,
       attachment: result[13] as AttachmentInfo?,
+      location: result[14] as LocationInfo?,
+      poll: result[15] as PollInfo?,
+      intro: result[16] as IntroInfo?,
     );
   }
 
@@ -364,7 +444,7 @@ class Message {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(messageId, other.messageId) && _deepEquals(contactId, other.contactId) && _deepEquals(outgoing, other.outgoing) && _deepEquals(body, other.body) && _deepEquals(createdAtSecs, other.createdAtSecs) && _deepEquals(state, other.state) && _deepEquals(replyTo, other.replyTo) && _deepEquals(forwarded, other.forwarded) && _deepEquals(deleted, other.deleted) && _deepEquals(edited, other.edited) && _deepEquals(disappearsAtSecs, other.disappearsAtSecs) && _deepEquals(pinned, other.pinned) && _deepEquals(starred, other.starred) && _deepEquals(attachment, other.attachment);
+    return _deepEquals(messageId, other.messageId) && _deepEquals(contactId, other.contactId) && _deepEquals(outgoing, other.outgoing) && _deepEquals(body, other.body) && _deepEquals(createdAtSecs, other.createdAtSecs) && _deepEquals(state, other.state) && _deepEquals(replyTo, other.replyTo) && _deepEquals(forwarded, other.forwarded) && _deepEquals(deleted, other.deleted) && _deepEquals(edited, other.edited) && _deepEquals(disappearsAtSecs, other.disappearsAtSecs) && _deepEquals(pinned, other.pinned) && _deepEquals(starred, other.starred) && _deepEquals(attachment, other.attachment) && _deepEquals(location, other.location) && _deepEquals(poll, other.poll) && _deepEquals(intro, other.intro);
   }
 
   @override
@@ -373,7 +453,197 @@ class Message {
 
   @override
   String toString() {
-    return 'Message(messageId: $messageId, contactId: $contactId, outgoing: $outgoing, body: $body, createdAtSecs: $createdAtSecs, state: $state, replyTo: $replyTo, forwarded: $forwarded, deleted: $deleted, edited: $edited, disappearsAtSecs: $disappearsAtSecs, pinned: $pinned, starred: $starred, attachment: $attachment)';
+    return 'Message(messageId: $messageId, contactId: $contactId, outgoing: $outgoing, body: $body, createdAtSecs: $createdAtSecs, state: $state, replyTo: $replyTo, forwarded: $forwarded, deleted: $deleted, edited: $edited, disappearsAtSecs: $disappearsAtSecs, pinned: $pinned, starred: $starred, attachment: $attachment, location: $location, poll: $poll, intro: $intro)';
+  }
+}
+
+/// An introduction under its message (ADR-037). `state`: 0 asked, 1 accepted,
+/// 2 declined, 3 connected, 4 failed (the card did not match).
+class IntroInfo {
+  IntroInfo({
+    required this.introId,
+    required this.otherName,
+    required this.state,
+  });
+
+  Uint8List introId;
+
+  String otherName;
+
+  int state;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      introId,
+      otherName,
+      state,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static IntroInfo decode(Object result) {
+    result as List<Object?>;
+    return IntroInfo(
+      introId: result[0]! as Uint8List,
+      otherName: result[1]! as String,
+      state: result[2]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! IntroInfo || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(introId, other.introId) && _deepEquals(otherName, other.otherName) && _deepEquals(state, other.state);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'IntroInfo(introId: $introId, otherName: $otherName, state: $state)';
+  }
+}
+
+/// A shared position (ADR-034): degrees × 10⁷ (WGS 84), accuracy in metres,
+/// and when the GPS fix was taken (Unix ms).
+class LocationInfo {
+  LocationInfo({
+    required this.latE7,
+    required this.lonE7,
+    required this.accuracyM,
+    required this.capturedMs,
+  });
+
+  int latE7;
+
+  int lonE7;
+
+  int accuracyM;
+
+  int capturedMs;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      latE7,
+      lonE7,
+      accuracyM,
+      capturedMs,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static LocationInfo decode(Object result) {
+    result as List<Object?>;
+    return LocationInfo(
+      latE7: result[0]! as int,
+      lonE7: result[1]! as int,
+      accuracyM: result[2]! as int,
+      capturedMs: result[3]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! LocationInfo || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(latE7, other.latE7) && _deepEquals(lonE7, other.lonE7) && _deepEquals(accuracyM, other.accuracyM) && _deepEquals(capturedMs, other.capturedMs);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'LocationInfo(latE7: $latE7, lonE7: $lonE7, accuracyM: $accuracyM, capturedMs: $capturedMs)';
+  }
+}
+
+/// A poll with live counts (ADR-035). Bit i of `mine` = I chose option i.
+class PollInfo {
+  PollInfo({
+    required this.question,
+    required this.options,
+    required this.multi,
+    required this.counts,
+    required this.mine,
+    required this.voters,
+  });
+
+  String question;
+
+  List<String> options;
+
+  bool multi;
+
+  List<int> counts;
+
+  int mine;
+
+  int voters;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      question,
+      options,
+      multi,
+      counts,
+      mine,
+      voters,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PollInfo decode(Object result) {
+    result as List<Object?>;
+    return PollInfo(
+      question: result[0]! as String,
+      options: (result[1]! as List<Object?>).cast<String>(),
+      multi: result[2]! as bool,
+      counts: (result[3]! as List<Object?>).cast<int>(),
+      mine: result[4]! as int,
+      voters: result[5]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PollInfo || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(question, other.question) && _deepEquals(options, other.options) && _deepEquals(multi, other.multi) && _deepEquals(counts, other.counts) && _deepEquals(mine, other.mine) && _deepEquals(voters, other.voters);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PollInfo(question: $question, options: $options, multi: $multi, counts: $counts, mine: $mine, voters: $voters)';
   }
 }
 
@@ -794,6 +1064,7 @@ class GroupMessage {
     required this.body,
     this.replyTo,
     required this.createdAtSecs,
+    this.poll,
   });
 
   Uint8List groupMsgId;
@@ -808,6 +1079,8 @@ class GroupMessage {
 
   int createdAtSecs;
 
+  PollInfo? poll;
+
   List<Object?> _toList() {
     return <Object?>[
       groupMsgId,
@@ -816,6 +1089,7 @@ class GroupMessage {
       body,
       replyTo,
       createdAtSecs,
+      poll,
     ];
   }
 
@@ -831,6 +1105,7 @@ class GroupMessage {
       body: result[3]! as String,
       replyTo: result[4] as Uint8List?,
       createdAtSecs: result[5]! as int,
+      poll: result[6] as PollInfo?,
     );
   }
 
@@ -843,7 +1118,7 @@ class GroupMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(groupMsgId, other.groupMsgId) && _deepEquals(authorFingerprint, other.authorFingerprint) && _deepEquals(outgoing, other.outgoing) && _deepEquals(body, other.body) && _deepEquals(replyTo, other.replyTo) && _deepEquals(createdAtSecs, other.createdAtSecs);
+    return _deepEquals(groupMsgId, other.groupMsgId) && _deepEquals(authorFingerprint, other.authorFingerprint) && _deepEquals(outgoing, other.outgoing) && _deepEquals(body, other.body) && _deepEquals(replyTo, other.replyTo) && _deepEquals(createdAtSecs, other.createdAtSecs) && _deepEquals(poll, other.poll);
   }
 
   @override
@@ -852,7 +1127,7 @@ class GroupMessage {
 
   @override
   String toString() {
-    return 'GroupMessage(groupMsgId: $groupMsgId, authorFingerprint: $authorFingerprint, outgoing: $outgoing, body: $body, replyTo: $replyTo, createdAtSecs: $createdAtSecs)';
+    return 'GroupMessage(groupMsgId: $groupMsgId, authorFingerprint: $authorFingerprint, outgoing: $outgoing, body: $body, replyTo: $replyTo, createdAtSecs: $createdAtSecs, poll: $poll)';
   }
 }
 
@@ -1083,47 +1358,59 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PermissionState) {
       buffer.putUint8(131);
       writeValue(buffer, value.index);
-    }    else if (value is StartupInfo) {
+    }    else if (value is NearbyContact) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is Contact) {
+    }    else if (value is StartupInfo) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is Message) {
+    }    else if (value is Contact) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is AttachmentInfo) {
+    }    else if (value is Message) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is PickedFile) {
+    }    else if (value is IntroInfo) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is ConversationSummary) {
+    }    else if (value is LocationInfo) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is Reaction) {
+    }    else if (value is PollInfo) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is MessageEvent) {
+    }    else if (value is AttachmentInfo) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is GroupMember) {
+    }    else if (value is PickedFile) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is Group) {
+    }    else if (value is ConversationSummary) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    }    else if (value is GroupMessage) {
+    }    else if (value is Reaction) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    }    else if (value is GroupDelivery) {
+    }    else if (value is MessageEvent) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    }    else if (value is QrCode) {
+    }    else if (value is GroupMember) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    }    else if (value is NetworkStatus) {
+    }    else if (value is Group) {
       buffer.putUint8(145);
+      writeValue(buffer, value.encode());
+    }    else if (value is GroupMessage) {
+      buffer.putUint8(146);
+      writeValue(buffer, value.encode());
+    }    else if (value is GroupDelivery) {
+      buffer.putUint8(147);
+      writeValue(buffer, value.encode());
+    }    else if (value is QrCode) {
+      buffer.putUint8(148);
+      writeValue(buffer, value.encode());
+    }    else if (value is NetworkStatus) {
+      buffer.putUint8(149);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1143,32 +1430,40 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : PermissionState.values[value];
       case 132:
-        return StartupInfo.decode(readValue(buffer)!);
+        return NearbyContact.decode(readValue(buffer)!);
       case 133:
-        return Contact.decode(readValue(buffer)!);
+        return StartupInfo.decode(readValue(buffer)!);
       case 134:
-        return Message.decode(readValue(buffer)!);
+        return Contact.decode(readValue(buffer)!);
       case 135:
-        return AttachmentInfo.decode(readValue(buffer)!);
+        return Message.decode(readValue(buffer)!);
       case 136:
-        return PickedFile.decode(readValue(buffer)!);
+        return IntroInfo.decode(readValue(buffer)!);
       case 137:
-        return ConversationSummary.decode(readValue(buffer)!);
+        return LocationInfo.decode(readValue(buffer)!);
       case 138:
-        return Reaction.decode(readValue(buffer)!);
+        return PollInfo.decode(readValue(buffer)!);
       case 139:
-        return MessageEvent.decode(readValue(buffer)!);
+        return AttachmentInfo.decode(readValue(buffer)!);
       case 140:
-        return GroupMember.decode(readValue(buffer)!);
+        return PickedFile.decode(readValue(buffer)!);
       case 141:
-        return Group.decode(readValue(buffer)!);
+        return ConversationSummary.decode(readValue(buffer)!);
       case 142:
-        return GroupMessage.decode(readValue(buffer)!);
+        return Reaction.decode(readValue(buffer)!);
       case 143:
-        return GroupDelivery.decode(readValue(buffer)!);
+        return MessageEvent.decode(readValue(buffer)!);
       case 144:
-        return QrCode.decode(readValue(buffer)!);
+        return GroupMember.decode(readValue(buffer)!);
       case 145:
+        return Group.decode(readValue(buffer)!);
+      case 146:
+        return GroupMessage.decode(readValue(buffer)!);
+      case 147:
+        return GroupDelivery.decode(readValue(buffer)!);
+      case 148:
+        return QrCode.decode(readValue(buffer)!);
+      case 149:
         return NetworkStatus.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1215,7 +1510,87 @@ class VlHostApi {
     return pigeonVar_replyValue! as StartupInfo;
   }
 
-  Future<void> createIdentity() async {
+  /// Internet mailbox (ADR-039): sealed envelopes to upload (mine first),
+  /// confirmation that the mailbox holds them, the tags to fetch, and one
+  /// fetched envelope (true if it was new). The app does the HTTP itself.
+  Future<List<Uint8List>> internetOutbox() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.internetOutbox$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<Uint8List>();
+  }
+
+  Future<void> internetUploaded(List<Uint8List> envelopes) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.internetUploaded$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[envelopes]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<List<Uint8List>> internetTags() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.internetTags$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<Uint8List>();
+  }
+
+  Future<bool> receiveInternet(Uint8List envelope) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.receiveInternet$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[envelope]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as bool;
+  }
+
+  /// Creates this phone's identity, or brings back the one this phone had
+  /// before a reinstall (ADR-038). True when it was restored.
+  Future<bool> createIdentity() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.createIdentity$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -1225,12 +1600,13 @@ class VlHostApi {
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
-    _extractReplyValueOrThrow(
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
         pigeonVar_replyList,
         pigeonVar_channelName,
-        isNullValid: true,
+        isNullValid: false,
     )
     ;
+    return pigeonVar_replyValue! as bool;
   }
 
   Future<Uint8List> myFingerprint() async {
@@ -2172,6 +2548,241 @@ class VlHostApi {
     return pigeonVar_replyValue! as NetworkStatus;
   }
 
+  /// One GPS fix for "Share location" (ADR-034). Asks for location permission
+  /// the first time; null if refused or no fix within about 20 s.
+  Future<LocationInfo?> currentLocation() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.currentLocation$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+    return pigeonVar_replyValue as LocationInfo?;
+  }
+
+  /// Shares a fix with a contact; returns the message id.
+  Future<Uint8List> sendLocation(Uint8List contactId, LocationInfo fix) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.sendLocation$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[contactId, fix]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  /// Opens the system Maps app at a position (it may need the internet).
+  Future<void> openMap(int latE7, int lonE7, String label) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.openMap$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[latE7, lonE7, label]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Polls (ADR-035): start one in a chat or a group; returns its id.
+  Future<Uint8List> sendPoll(Uint8List contactId, String question, List<String> options, bool multi) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.sendPoll$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[contactId, question, options, multi]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  Future<Uint8List> sendGroupPoll(Uint8List groupId, String question, List<String> options, bool multi) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.sendGroupPoll$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[groupId, question, options, multi]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  /// Introductions (ADR-037).
+  Future<Uint8List> introduce(Uint8List contactA, Uint8List contactB) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.introduce$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[contactA, contactB]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  Future<void> acceptIntro(Uint8List introId, String myName) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.acceptIntro$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[introId, myName]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> declineIntro(Uint8List introId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.declineIntro$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[introId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// QR "paper" message (ADR-036): the sealed envelope of one of my
+  /// undelivered messages as `VLM1:` text, and taking a scanned one (returns
+  /// the contact id it came from).
+  Future<String> paperMessage(Uint8List messageId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.paperMessage$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[messageId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as String;
+  }
+
+  Future<Uint8List> receivePaper(String code) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.receivePaper$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[code]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  /// My whole choice for a poll (bit i = option i; 0 withdraws).
+  Future<void> vote(Uint8List pollId, int choices) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.vote$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[pollId, choices]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Paired, unblocked contacts seen over Bluetooth in the last `withinSecs`.
+  Future<List<NearbyContact>> nearbyContacts(int withinSecs) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.nearbyContacts$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[withinSecs]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<NearbyContact>();
+  }
+
   /// Starts or stops scanning, advertising and link sessions. The choice is
   /// persisted. On iOS the first start shows the system Bluetooth prompt.
   Future<void> setRelayEnabled(bool enabled) async {
@@ -2209,6 +2820,46 @@ class VlHostApi {
         isNullValid: true,
     )
     ;
+  }
+
+  /// Seconds before syncing with the same nearby phone again (ADR-032): 1 ..= 45, default 5.
+  Future<int> resyncSecs() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.resyncSecs$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as int;
+  }
+
+  /// Stores the interval (clamped to 1 ..= 45) and returns the stored value.
+  Future<int> setResyncSecs(int secs) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.setResyncSecs$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[secs]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as int;
   }
 
   /// Device biometrics or passcode can be used for the app lock.
@@ -2374,6 +3025,25 @@ class VlHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[text]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// The peer sends this file as an attachment (real chunking and encryption).
+  Future<void> debugPeerSendFile(String name, Uint8List data) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.vl_host.VlHostApi.debugPeerSendFile$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[name, data]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

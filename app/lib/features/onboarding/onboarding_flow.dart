@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/failure.dart';
+import '../../app/google_account.dart';
 import '../../app/services.dart';
 import '../../design/tokens.dart';
 import '../../design/widgets/states.dart';
@@ -210,6 +211,21 @@ class _IdentityPageState extends State<_IdentityPage> {
   final _name = TextEditingController();
   bool _busy = false;
   String? _error;
+  ({String email, String name})? _google;
+
+  Future<void> _useGoogle() async {
+    setState(() => _error = null);
+    try {
+      final g = await GoogleAccount.signIn();
+      if (g == null || !mounted) return;
+      setState(() {
+        _google = g;
+        if (_name.text.trim().isEmpty && g.name.isNotEmpty) _name.text = g.name.characters.take(32).toString();
+      });
+    } on GoogleAccountFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
 
   @override
   void dispose() {
@@ -224,12 +240,28 @@ class _IdentityPageState extends State<_IdentityPage> {
       _busy = true;
       _error = null;
     });
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await s.call((api) => api.createIdentity());
+      final restored = await s.call((api) => api.createIdentity());
       await s.call((api) => api.setSetting(AppServices.profileNameKey, name));
       s.profileName = name;
+      if (_google case final g?) {
+        await s.call((api) => api.setSetting(GoogleAccount.emailKey, g.email));
+        await s.call((api) => api.setSetting(GoogleAccount.nameKey, g.name));
+      }
       HapticFeedback.lightImpact();
       widget.onCreated();
+      if (restored) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Welcome back: this phone kept your VYRO LINK ID. '
+              'Chats were not kept, so scan codes with your contacts once more.',
+            ),
+            duration: Duration(seconds: 8),
+          ),
+        );
+      }
     } on VlFailure catch (e) {
       setState(() => _error = e.message);
     } finally {
@@ -277,6 +309,25 @@ class _IdentityPageState extends State<_IdentityPage> {
             child: _busy
                 ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator.adaptive(strokeWidth: 2))
                 : const Text('Create my identity'),
+          ),
+          const SizedBox(height: Space.s),
+          if (_google == null)
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _useGoogle,
+              icon: const Icon(Icons.account_circle_outlined),
+              label: const Text('Continue with Google (optional)'),
+            )
+          else
+            Text(
+              'Google account: ${_google!.email}. Kept on this phone only.',
+              style: t.bodySmall!.copyWith(color: c.text2),
+              textAlign: TextAlign.center,
+            ),
+          const SizedBox(height: Space.xs),
+          Text(
+            'Not needed to use VYRO LINK. Signing in needs the internet once and only fills in your name.',
+            style: t.bodySmall!.copyWith(color: c.text2),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: Space.xl),
         ],
@@ -338,7 +389,10 @@ class _BluetoothPageState extends State<_BluetoothPage> {
             Icons.lock_outline_rounded,
             'Phones exchange only encrypted envelopes. A phone carrying your message cannot read it.',
           ),
-          point(Icons.visibility_off_outlined, 'VYRO LINK never shows who is nearby and does not use your location.'),
+          point(
+            Icons.visibility_off_outlined,
+            'Strangers never learn who you are. Only people you pair with can see you are nearby, and your location is shared only when you choose to.',
+          ),
           point(
             Icons.battery_5_bar_rounded,
             'Your phone may limit Bluetooth in the background. Messages move most reliably while VYRO LINK is open.',

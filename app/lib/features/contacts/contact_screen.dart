@@ -12,6 +12,7 @@ import '../../design/widgets/avatar.dart';
 import '../../design/widgets/states.dart';
 import '../../util/format.dart';
 import '../../design/theme.dart';
+import '../../design/widgets/nearby.dart';
 import '../pairing/pairing_screen.dart';
 import '../settings/my_id_screen.dart';
 
@@ -60,25 +61,46 @@ class _Body extends StatelessWidget {
     }
   }
 
-  Future<void> _rename(BuildContext context) async {
-    final controller = TextEditingController(text: contact.displayName);
-    final name = await showAdaptiveDialog<String>(
+  /// ADR-037: pick another contact; both are asked before anything is shared.
+  Future<void> _introduce(BuildContext context) async {
+    final s = context.services;
+    final others = (await s.call((api) => api.contacts()))
+        .where((x) => !x.blocked && idKey(x.contactId) != idKey(contact.contactId))
+        .toList();
+    if (!context.mounted) return;
+    if (others.isEmpty) {
+      showMessage(context, 'You need at least one other contact to introduce them to.');
+      return;
+    }
+    final other = await showModalBottomSheet<Contact>(
       context: context,
-      builder: (d) => AlertDialog(
-        title: const Text('Rename contact'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 32,
-          textCapitalization: TextCapitalization.words,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(d, controller.text.trim()), child: const Text('Save')),
+      useSafeArea: true,
+      builder: (sheet) => ListView(
+        shrinkWrap: true,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.xl, 0, Space.xl, Space.s),
+            child: Text('Introduce ${contact.displayName} to…', style: Theme.of(sheet).textTheme.headlineSmall),
+          ),
+          for (final o in others)
+            ListTile(
+              leading: Avatar(name: o.displayName, seed: o.contactId, size: 40),
+              title: Text(o.displayName),
+              onTap: () => Navigator.pop(sheet, o),
+            ),
         ],
       ),
     );
-    controller.dispose();
+    if (other == null || !context.mounted) return;
+    await _run(
+      context,
+      (api) => api.introduce(contact.contactId, other.contactId),
+      'Asked ${contact.displayName} and ${other.displayName}',
+    );
+  }
+
+  Future<void> _rename(BuildContext context) async {
+    final name = await askName(context, title: 'Rename contact', initial: contact.displayName);
     if (name == null || name.isEmpty || !context.mounted) return;
     await _run(context, (api) => api.renameContact(contact.contactId, name), 'Renamed');
   }
@@ -164,6 +186,19 @@ class _Body extends StatelessWidget {
               style: t.bodySmall!.copyWith(color: contact.verified ? c.ok : c.text2),
             ),
           ],
+        ),
+        const SizedBox(height: Space.xs),
+        if (contact.introducedBy != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Space.xs),
+            child: Text(
+              'Introduced by ${contact.introducedBy}, not met in person',
+              style: t.bodySmall!.copyWith(color: c.text2),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        Center(
+          child: NearbyTag(contactId: contact.contactId, detail: true, lastSeenSecs: contact.lastSeenSecs),
         ),
         const SizedBox(height: Space.xl),
         Padding(
@@ -269,6 +304,13 @@ class _Body extends StatelessWidget {
               subtitle: const Text('Refreshes the keys in person; messages are kept'),
               onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PairingScreen())),
             ),
+            if (!contact.blocked)
+              ListTile(
+                leading: const Icon(Icons.handshake_outlined),
+                title: const Text('Introduce to someone'),
+                subtitle: const Text('Both are asked first; they start as not verified'),
+                onTap: () => _introduce(context),
+              ),
           ],
         ),
         const SectionHeader('Privacy'),

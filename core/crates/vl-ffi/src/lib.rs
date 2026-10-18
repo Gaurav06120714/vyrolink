@@ -39,6 +39,8 @@ pub enum VlError {
     OwnPairingCode,
     InvalidAttachment,
     CannotResend,
+    PaperUnavailable,
+    NotForThisPhone,
     InvalidInput {
         reason: String,
     },
@@ -79,6 +81,8 @@ impl From<CoreError> for VlError {
             CoreError::OwnPairingCode => Self::OwnPairingCode,
             CoreError::InvalidAttachment => Self::InvalidAttachment,
             CoreError::CannotResend => Self::CannotResend,
+            CoreError::PaperUnavailable => Self::PaperUnavailable,
+            CoreError::NotForThisPhone => Self::NotForThisPhone,
             CoreError::Wipe(kind) => Self::Storage {
                 reason: format!("wipe could not remove a database file: {kind}"),
             },
@@ -149,6 +153,10 @@ pub struct Contact {
     pub verified: bool,
     pub blocked: bool,
     pub safety_number: String,
+    /// Unix seconds this contact was last proven nearby (ADR-033).
+    pub last_seen_secs: Option<i64>,
+    /// Who introduced this contact (ADR-037); `None` if met in person.
+    pub introduced_by: Option<String>,
 }
 
 impl From<ContactInfo> for Contact {
@@ -161,6 +169,8 @@ impl From<ContactInfo> for Contact {
             verified: c.verified,
             blocked: c.blocked,
             safety_number: c.safety_number,
+            last_seen_secs: c.last_seen_secs,
+            introduced_by: c.introduced_by,
         }
     }
 }
@@ -182,6 +192,49 @@ pub struct Message {
     pub pinned: bool,
     pub starred: bool,
     pub attachment: Option<AttachmentInfo>,
+    pub location: Option<LocationInfo>,
+    pub poll: Option<PollInfo>,
+    pub intro: Option<IntroInfo>,
+}
+
+/// An introduction shown under its message (ADR-037). `state`: 0 asked,
+/// 1 accepted, 2 declined, 3 connected, 4 failed (the card did not match).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct IntroInfo {
+    pub intro_id: Vec<u8>,
+    pub other_name: String,
+    pub state: u8,
+}
+
+/// A shared location (ADR-034): degrees × 10⁷, accuracy in metres, fix time.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct LocationInfo {
+    pub lat_e7: i32,
+    pub lon_e7: i32,
+    pub accuracy_m: u16,
+    pub captured_ms: u64,
+}
+
+/// A poll with live counts (ADR-035). `mine` has bit i set for option i.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PollInfo {
+    pub question: String,
+    pub options: Vec<String>,
+    pub multi: bool,
+    pub counts: Vec<u32>,
+    pub mine: u16,
+    pub voters: u32,
+}
+
+fn poll_info(n: &Node, id: &[u8; 16]) -> Option<PollInfo> {
+    n.poll(id).ok().flatten().map(|p| PollInfo {
+        question: p.question,
+        options: p.options,
+        multi: p.multi,
+        counts: p.counts,
+        mine: p.mine,
+        voters: p.voters,
+    })
 }
 
 /// Attachment summary (ADR-026). `kind` 1 = image, 2 = file. For my own
@@ -215,8 +268,31 @@ fn message(n: &Node, m: MessageRow) -> Message {
             delivered_chunks: delivered,
         }
     });
+    let location = n
+        .location(&m.message_id)
+        .ok()
+        .flatten()
+        .map(|l| LocationInfo {
+            lat_e7: l.lat_e7,
+            lon_e7: l.lon_e7,
+            accuracy_m: l.accuracy_m,
+            captured_ms: l.captured_ms,
+        });
+    let poll = poll_info(n, &m.message_id);
+    let intro = n
+        .intro_for_message(&m.message_id)
+        .ok()
+        .flatten()
+        .map(|i| IntroInfo {
+            intro_id: i.intro_id.to_vec(),
+            other_name: i.other_name,
+            state: i.state,
+        });
     Message {
         attachment,
+        location,
+        poll,
+        intro,
         ..Message::from(m)
     }
 }
@@ -225,6 +301,9 @@ impl From<MessageRow> for Message {
     fn from(m: MessageRow) -> Self {
         Self {
             attachment: None,
+            location: None,
+            poll: None,
+            intro: None,
             message_id: m.message_id.to_vec(),
             contact_id: m.contact_id.to_vec(),
             outgoing: m.outgoing,
@@ -316,6 +395,7 @@ pub struct GroupMessage {
     pub body: String,
     pub reply_to: Option<Vec<u8>>,
     pub created_at_secs: i64,
+    pub poll: Option<PollInfo>,
 }
 
 impl From<GroupMessageRow> for GroupMessage {
@@ -327,6 +407,7 @@ impl From<GroupMessageRow> for GroupMessage {
             body: m.body,
             reply_to: m.reply_to.map(|r| r.to_vec()),
             created_at_secs: m.created_at,
+            poll: None,
         }
     }
 }
@@ -380,6 +461,38 @@ impl VlNode {
 
     pub fn create_identity(&self, now_secs: u64) -> Result<(), VlError> {
         Ok(self.lock()?.create_identity(now_secs)?)
+    }
+
+    /// Internet mailbox (ADR-039): sealed envelopes to upload, mine first.
+    pub fn internet_outbox(&self, now_secs: u64) -> Result<Vec<Vec<u8>>, VlError> {
+        Ok(self.lock()?.internet_outbox(now_secs)?)
+    }
+
+    pub fn internet_uploaded(&self, envelopes: Vec<Vec<u8>>, now_secs: u64) -> Result<(), VlError> {
+        Ok(self.lock()?.internet_uploaded(&envelopes, now_secs)?)
+    }
+
+    pub fn internet_tags(&self) -> Result<Vec<Vec<u8>>, VlError> {
+        Ok(self
+            .lock()?
+            .internet_tags()?
+            .iter()
+            .map(|t| t.to_vec())
+            .collect())
+    }
+
+    /// True if the envelope was new mail or a new receipt for this phone.
+    pub fn receive_internet(&self, envelope: Vec<u8>, now_secs: u64) -> Result<bool, VlError> {
+        Ok(self.lock()?.receive_internet(&envelope, now_secs)?)
+    }
+
+    /// Long-term keys only, for Keychain / Block Store (ADR-038). Never log.
+    pub fn identity_backup(&self) -> Result<Vec<u8>, VlError> {
+        Ok(self.lock()?.identity_backup()?.to_vec())
+    }
+
+    pub fn restore_identity(&self, backup: Vec<u8>, now_secs: u64) -> Result<(), VlError> {
+        Ok(self.lock()?.restore_identity(&backup, now_secs)?)
     }
 
     pub fn pairing_card(&self, display_name: String, now_secs: u64) -> Result<Vec<u8>, VlError> {
@@ -746,6 +859,43 @@ impl VlNode {
         }
     }
 
+    /// Unblocked contacts seen over Bluetooth within `within_secs` of `now_secs`.
+    pub fn nearby_contacts(
+        &self,
+        now_secs: u64,
+        within_secs: u64,
+    ) -> Result<Vec<NearbyContact>, VlError> {
+        Ok(self
+            .lock()?
+            .nearby_contacts(now_secs, within_secs)?
+            .into_iter()
+            .map(|(id, seen)| NearbyContact {
+                contact_id: id.to_vec(),
+                seen_secs: seen,
+            })
+            .collect())
+    }
+
+    /// Contacts that came into range since the last call (for one generic
+    /// notification that never names them).
+    pub fn take_nearby_arrivals(&self) -> u32 {
+        self.lock()
+            .map(|mut n| n.take_nearby_arrivals())
+            .unwrap_or(0)
+    }
+
+    /// Seconds to wait before syncing with the same nearby phone again (1 ..= 45, default 5).
+    pub fn resync_secs(&self) -> u32 {
+        self.lock()
+            .and_then(|n| n.resync_secs().map_err(Into::into))
+            .unwrap_or(vl_core::RESYNC_DEFAULT_SECS)
+    }
+
+    /// Stores the interval (clamped) and returns the stored value.
+    pub fn set_resync_secs(&self, secs: u32) -> Result<u32, VlError> {
+        Ok(self.lock()?.set_resync_secs(secs)?)
+    }
+
     pub fn link_is_open(&self, link_id: u64) -> bool {
         self.lock()
             .map(|n| n.link_is_open(link_id))
@@ -805,12 +955,109 @@ impl VlNode {
         group_id: Vec<u8>,
         limit: u32,
     ) -> Result<Vec<GroupMessage>, VlError> {
+        let n = self.lock()?;
+        Ok(n.group_messages(&id16(&group_id)?, limit)?
+            .into_iter()
+            .map(|m| {
+                let poll = poll_info(&n, &m.group_msg_id);
+                GroupMessage {
+                    poll,
+                    ..GroupMessage::from(m)
+                }
+            })
+            .collect())
+    }
+
+    /// Shares this phone's position with a contact (ADR-034).
+    pub fn send_location(
+        &self,
+        contact_id: Vec<u8>,
+        lat_e7: i32,
+        lon_e7: i32,
+        accuracy_m: u16,
+        captured_ms: u64,
+        now_secs: u64,
+    ) -> Result<Vec<u8>, VlError> {
         Ok(self
             .lock()?
-            .group_messages(&id16(&group_id)?, limit)?
-            .into_iter()
-            .map(GroupMessage::from)
-            .collect())
+            .send_location(
+                &id16(&contact_id)?,
+                lat_e7,
+                lon_e7,
+                accuracy_m,
+                captured_ms,
+                now_secs,
+            )?
+            .to_vec())
+    }
+
+    /// Starts a poll in a chat (ADR-035); returns the poll's message id.
+    pub fn send_poll(
+        &self,
+        contact_id: Vec<u8>,
+        question: String,
+        options: Vec<String>,
+        multi: bool,
+        now_secs: u64,
+    ) -> Result<Vec<u8>, VlError> {
+        Ok(self
+            .lock()?
+            .send_poll(&id16(&contact_id)?, &question, &options, multi, now_secs)?
+            .to_vec())
+    }
+
+    /// Starts a poll in a group; returns the poll's group message id.
+    pub fn send_group_poll(
+        &self,
+        group_id: Vec<u8>,
+        question: String,
+        options: Vec<String>,
+        multi: bool,
+        now_secs: u64,
+    ) -> Result<Vec<u8>, VlError> {
+        Ok(self
+            .lock()?
+            .send_group_poll(&id16(&group_id)?, &question, &options, multi, now_secs)?
+            .to_vec())
+    }
+
+    /// Introduces two of my contacts to each other (ADR-037).
+    pub fn introduce(&self, a: Vec<u8>, b: Vec<u8>, now_secs: u64) -> Result<Vec<u8>, VlError> {
+        Ok(self
+            .lock()?
+            .introduce(&id16(&a)?, &id16(&b)?, now_secs)?
+            .to_vec())
+    }
+
+    /// Accepts an introduction; `my_name` goes on the fresh card.
+    pub fn accept_intro(
+        &self,
+        intro_id: Vec<u8>,
+        my_name: String,
+        now_secs: u64,
+    ) -> Result<(), VlError> {
+        Ok(self
+            .lock()?
+            .accept_intro(&id16(&intro_id)?, &my_name, now_secs)?)
+    }
+
+    pub fn decline_intro(&self, intro_id: Vec<u8>) -> Result<(), VlError> {
+        Ok(self.lock()?.decline_intro(&id16(&intro_id)?)?)
+    }
+
+    /// QR text for one of my undelivered messages (ADR-036).
+    pub fn paper_message(&self, message_id: Vec<u8>) -> Result<String, VlError> {
+        Ok(self.lock()?.paper_message(&id16(&message_id)?)?)
+    }
+
+    /// A scanned message code; returns the contact id it came from.
+    pub fn receive_paper(&self, code: String, now_secs: u64) -> Result<Vec<u8>, VlError> {
+        Ok(self.lock()?.receive_paper(&code, now_secs)?.to_vec())
+    }
+
+    /// Sets my whole choice for a poll (bit i = option i; 0 withdraws).
+    pub fn vote(&self, poll_id: Vec<u8>, choices: u16, now_secs: u64) -> Result<(), VlError> {
+        Ok(self.lock()?.vote(&id16(&poll_id)?, choices, now_secs)?)
     }
 
     pub fn send_group_message(
@@ -879,6 +1126,13 @@ impl VlNode {
         }
         Ok(NodeGuard(guard))
     }
+}
+
+/// A paired contact seen in Bluetooth range (ADR-029). Kept in memory only.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NearbyContact {
+    pub contact_id: Vec<u8>,
+    pub seen_secs: u64,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
