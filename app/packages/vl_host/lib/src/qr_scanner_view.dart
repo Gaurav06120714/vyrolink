@@ -8,10 +8,17 @@ class QrScannerView extends StatelessWidget {
 
   static const _viewType = 'vl_host/qr_scanner';
 
+  /// The web chat's scanner (a browser camera view), set by its host. In a
+  /// browser `defaultTargetPlatform` is the visitor's OS, so check web first.
+  static Widget Function()? webBuilder;
+
   @override
-  Widget build(BuildContext context) => switch (defaultTargetPlatform) {
-    TargetPlatform.iOS => const UiKitView(viewType: _viewType),
-    TargetPlatform.android => const AndroidView(viewType: _viewType),
-    _ => const SizedBox.expand(),
-  };
+  Widget build(BuildContext context) {
+    if (kIsWeb) return webBuilder?.call() ?? const SizedBox.expand();
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => const UiKitView(viewType: _viewType),
+      TargetPlatform.android => const AndroidView(viewType: _viewType),
+      _ => const SizedBox.expand(),
+    };
+  }
 }

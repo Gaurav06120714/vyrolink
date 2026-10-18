@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,7 +23,26 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   final _pages = PageController();
   int _page = 0;
 
-  static const _intro = [
+  /// The web chat (ADR-040) has no Bluetooth, and says plainly that the app is safer.
+  static const _webIntro = [
+    _IntroPage(
+      icon: Icons.cloud_sync_rounded,
+      title: 'VYRO LINK\nin your browser',
+      body: 'Chat with VYRO LINK users from this browser. Messages are end-to-end encrypted here before they leave, then go through the VYRO LINK mailbox, which cannot read them.',
+    ),
+    _IntroPage(
+      icon: Icons.shield_outlined,
+      title: 'The phone app\nis safer',
+      body: 'This page is downloaded from our server each time you open it, and your keys are kept in this browser. Use the phone app when you can, and don\'t use the web chat on a shared computer.',
+    ),
+    _IntroPage(
+      icon: Icons.qr_code_2_rounded,
+      title: 'Add people\nin person',
+      body: 'You add a contact by scanning each other\'s code face to face, with this device\'s camera. Nobody else can read your messages.',
+    ),
+  ];
+
+  static const _phoneIntro = [
     _IntroPage(
       icon: Icons.wifi_off_rounded,
       title: 'Messages without\nthe internet',
@@ -39,6 +59,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       body: 'You add a contact by scanning each other\'s code face to face. Nobody else can read your messages, including the phones that carry them.',
     ),
   ];
+
+  static const _intro = kIsWeb ? _webIntro : _phoneIntro;
 
   void _next() {
     if (_page < _intro.length) {
@@ -84,9 +106,11 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                 children: [
                   ..._intro,
                   _IdentityPage(
-                    onCreated: () => _pages.nextPage(duration: Motion.nav, curve: Curves.easeOutCubic),
+                    onCreated: kIsWeb
+                        ? widget.onDone
+                        : () => _pages.nextPage(duration: Motion.nav, curve: Curves.easeOutCubic),
                   ),
-                  _BluetoothPage(onDone: widget.onDone),
+                  if (!kIsWeb) _BluetoothPage(onDone: widget.onDone),
                 ],
               ),
             ),
@@ -287,7 +311,9 @@ class _IdentityPageState extends State<_IdentityPage> {
           ),
           const SizedBox(height: Space.m),
           Text(
-            'Keys are created on this phone and never leave it. Your name is shared only with people you pair with.',
+            kIsWeb
+                ? 'Keys are created in this browser and never leave it. Your name is shared only with people you pair with.'
+                : 'Keys are created on this phone and never leave it. Your name is shared only with people you pair with.',
             style: t.bodyLarge!.copyWith(color: c.text2),
             textAlign: TextAlign.center,
           ),
@@ -311,7 +337,9 @@ class _IdentityPageState extends State<_IdentityPage> {
                 : const Text('Create my identity'),
           ),
           const SizedBox(height: Space.s),
-          if (_google == null)
+          if (kIsWeb)
+            const SizedBox.shrink()
+          else if (_google == null)
             OutlinedButton.icon(
               onPressed: _busy ? null : _useGoogle,
               icon: const Icon(Icons.account_circle_outlined),

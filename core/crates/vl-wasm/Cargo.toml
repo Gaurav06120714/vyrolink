@@ -1,0 +1,24 @@
+[package]
+name = "vl-wasm"
+description = "VYRO LINK node for the web chat (ADR-040): the Rust core compiled to WebAssembly"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+vl-ffi = { path = "../vl-ffi", features = ["serde"] }
+serde = "1"
+serde_json = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+sqlite-wasm-rs = "0.5"
+getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+getrandom04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }

@@ -146,17 +146,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => Routes.myId(context),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.account_circle_outlined),
-                    title: Text(_googleEmail ?? 'Sign in with Google'),
-                    subtitle: Text(
-                      _googleEmail == null
-                          ? 'Optional. VYRO LINK works fully without it.'
-                          : 'Google account · kept on this phone only',
+                  if (!kIsWeb)
+                    ListTile(
+                      leading: const Icon(Icons.account_circle_outlined),
+                      title: Text(_googleEmail ?? 'Sign in with Google'),
+                      subtitle: Text(
+                        _googleEmail == null
+                            ? 'Optional. VYRO LINK works fully without it.'
+                            : 'Google account · kept on this phone only',
+                      ),
+                      trailing: _googleEmail == null ? const Icon(Icons.chevron_right_rounded) : const Text('Sign out'),
+                      onTap: _google,
                     ),
-                    trailing: _googleEmail == null ? const Icon(Icons.chevron_right_rounded) : const Text('Sign out'),
-                    onTap: _google,
-                  ),
                 ],
               ),
               const SectionHeader('Messaging'),

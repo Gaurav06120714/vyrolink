@@ -192,6 +192,7 @@ footer a { color: var(--text2); }
       <a class="opt" href="#limits">Limits</a>
       <a class="opt" href="#faq">FAQ</a>
       <a href="#privacy">Privacy</a>
+      <a href="chat/">Web chat</a>
     </nav>
   </div>
 </header>
@@ -205,6 +206,7 @@ footer a { color: var(--text2); }
         <p class="lede">VYRO LINK sends end-to-end encrypted messages over Bluetooth. When your friend is out of range, other phones carry the message closer, without being able to read it.</p>
         <div class="actions">
           <a class="btn" href="#how">See how it works</a>
+          <a href="chat/">Open the web chat</a>
           <a href="#privacy">Read the privacy policy</a>
         </div>
         <p class="note">No phone number. No account needed. No servers needed. Coming to iPhone and Android.</p>
@@ -389,6 +391,15 @@ footer a { color: var(--text2); }
 
       <h3>Optional internet mailbox</h3>
       <p>It is off unless you turn on <strong>Use internet when available</strong> (Network → Relay settings). Then, while the app is open, your phone also uploads the same sealed messages it would hand to nearby phones, and downloads the ones addressed to it, so a message gets through when either phone has a connection. The mailbox holds only sealed envelopes it cannot open. Each shows a rotating code that changes every few hours instead of who it is for, an expiry time and a size. It deletes them when they expire, after at most about a week. Like any server, it sees the IP address and the time of each connection; it keeps addresses only in memory for a minute, to limit abuse, and writes no logs of them. Turn the switch off to stop using it.</p>
+
+      <h3>Web chat</h3>
+      <p>The web chat runs the same end-to-end encryption inside your browser. It has no Bluetooth, so it always uses the internet mailbox described above.</p>
+      <ul>
+        <li>Your keys, contacts and messages are kept in this browser's storage for the web chat's site. A browser has no protected key store like a phone's Keychain or Keystore. Anyone who can use your browser profile could read them, so don't use the web chat on a shared computer.</li>
+        <li>Panic wipe in the web chat deletes all of it. Clearing the site's data in your browser does the same.</li>
+        <li>The page is downloaded from our server each time you open it, so you trust us not to change it. The phone apps don't have this weakness.</li>
+        <li>The page runs only its own code, enforced by a Content-Security-Policy. To draw some characters and emoji, your browser may download fonts from Google's font service (fonts.gstatic.com), which then sees your IP address. It sets no cookies, has no analytics and loads nothing else from other companies. Google sign-in is not available on the web.</li>
+      </ul>
 
       <h3>Optional Google sign-in</h3>
       <p>You can choose to sign in with Google during setup or in Settings. You don't need it to use VYRO LINK. If you do, Google shows its own sign-in screen and then gives the app your <strong>name and email address</strong>. The app uses them only to fill in your name and to show which account you used. They are stored encrypted on your phone. They are never sent to us, never shared with your contacts and never sent over Bluetooth.</p>

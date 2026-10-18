@@ -11,9 +11,16 @@ workspace = true
 
 [dependencies]
 vl-proto = { path = "../vl-proto" }
-rusqlite = { version = "=0.40.2", features = ["bundled-sqlcipher"] }
 vl-routing = { path = "../vl-routing" }
 zeroize = "1.9"
+
+# Phones and this Mac: SQLCipher. Browser (web chat, ADR-040): plain SQLite
+# compiled to WebAssembly; the web host keeps the bytes in browser storage.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rusqlite = { version = "=0.40.2", features = ["bundled-sqlcipher"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+rusqlite = { version = "=0.40.2", features = ["bundled", "serialize"] }
 
 # Android has no CommonCrypto; SQLCipher bundles OpenSSL there. Apple targets use CommonCrypto.
 [target.'cfg(target_os = "android")'.dependencies]

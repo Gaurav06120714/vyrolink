@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vl_host/vl_host.dart';
 
@@ -313,7 +314,8 @@ class RelayBanner extends StatelessWidget {
     return ValueListenableBuilder<NetworkStatus?>(
       valueListenable: s.network,
       builder: (context, n, _) {
-        if (n == null) return const SizedBox.shrink();
+        // The web chat has no Bluetooth; it only uses the internet mailbox.
+        if (n == null || kIsWeb) return const SizedBox.shrink();
         if (!n.relayEnabled) {
           return InfoBanner(
             kind: BannerKind.info,

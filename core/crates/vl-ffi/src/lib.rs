@@ -115,6 +115,11 @@ fn key32(bytes: &[u8]) -> Result<[u8; 32], VlError> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub enum DeliveryState {
     Queued,
     SentToNearby,
@@ -144,6 +149,11 @@ impl From<MessageState> for DeliveryState {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct Contact {
     pub contact_id: Vec<u8>,
     pub display_name: String,
@@ -177,6 +187,11 @@ impl From<ContactInfo> for Contact {
 
 /// `body` is the effective text (latest valid edit; empty when `deleted`).
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct Message {
     pub message_id: Vec<u8>,
     pub contact_id: Vec<u8>,
@@ -200,6 +215,11 @@ pub struct Message {
 /// An introduction shown under its message (ADR-037). `state`: 0 asked,
 /// 1 accepted, 2 declined, 3 connected, 4 failed (the card did not match).
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct IntroInfo {
     pub intro_id: Vec<u8>,
     pub other_name: String,
@@ -208,6 +228,11 @@ pub struct IntroInfo {
 
 /// A shared location (ADR-034): degrees × 10⁷, accuracy in metres, fix time.
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct LocationInfo {
     pub lat_e7: i32,
     pub lon_e7: i32,
@@ -217,6 +242,11 @@ pub struct LocationInfo {
 
 /// A poll with live counts (ADR-035). `mine` has bit i set for option i.
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct PollInfo {
     pub question: String,
     pub options: Vec<String>,
@@ -241,6 +271,11 @@ fn poll_info(n: &Node, id: &[u8; 16]) -> Option<PollInfo> {
 /// attachments `delivered_chunks` counts chunks with authenticated proof; the
 /// bytes come from [`VlNode::attachment_data`].
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct AttachmentInfo {
     pub kind: u8,
     pub name: String,
@@ -322,6 +357,11 @@ impl From<MessageRow> for Message {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct ConversationSummary {
     pub contact: Contact,
     pub last: Option<Message>,
@@ -329,6 +369,11 @@ pub struct ConversationSummary {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct MessageEvent {
     pub at_secs: i64,
     pub state: DeliveryState,
@@ -336,6 +381,11 @@ pub struct MessageEvent {
 
 /// Counters only; no identifiers.
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct NodeStats {
     pub open_links: u32,
     pub own_envelopes: u32,
@@ -345,12 +395,22 @@ pub struct NodeStats {
 
 /// A QR symbol: `size` × `size` modules, row-major, 1 = dark. No quiet zone.
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct QrMatrix {
     pub size: u32,
     pub modules: Vec<u8>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct GroupMemberInfo {
     pub fingerprint: Vec<u8>,
     pub name: String,
@@ -358,6 +418,11 @@ pub struct GroupMemberInfo {
 
 /// A small group (ADR-024). `left` is true after leaving or being removed.
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct Group {
     pub group_id: Vec<u8>,
     pub name: String,
@@ -388,6 +453,11 @@ impl From<GroupRow> for Group {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct GroupMessage {
     pub group_msg_id: Vec<u8>,
     pub author_fingerprint: Vec<u8>,
@@ -414,6 +484,11 @@ impl From<GroupMessageRow> for GroupMessage {
 
 /// Pairwise copies of one of my group messages: delivered (with proof) / sent.
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct GroupDelivery {
     pub delivered: u32,
     pub sent: u32,
@@ -421,6 +496,11 @@ pub struct GroupDelivery {
 
 /// A reaction in force on a message; `reaction` indexes [`reaction_set`] (1..=8).
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct MessageReaction {
     pub from_me: bool,
     pub reaction: u8,
@@ -1130,12 +1210,22 @@ impl VlNode {
 
 /// A paired contact seen in Bluetooth range (ADR-029). Kept in memory only.
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct NearbyContact {
     pub contact_id: Vec<u8>,
     pub seen_secs: u64,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    serde(rename_all = "camelCase")
+)]
 pub struct LinkStart {
     pub link_id: u64,
     pub bytes_to_send: Vec<u8>,

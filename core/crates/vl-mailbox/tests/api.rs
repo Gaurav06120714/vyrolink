@@ -59,7 +59,7 @@ async fn call(
             [10, 0, 0, 1],
             1,
         ))));
-    let res = app(m.clone(), None).oneshot(req).await.unwrap();
+    let res = app(m.clone(), Vec::new()).oneshot(req).await.unwrap();
     let status = res.status();
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     (

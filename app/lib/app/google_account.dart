@@ -19,11 +19,14 @@ class GoogleAccount {
   static const emailKey = 'account.google.email';
   static const nameKey = 'account.google.name';
 
-  static bool get configured => switch (defaultTargetPlatform) {
-    TargetPlatform.iOS => googleIosClientId.isNotEmpty,
-    TargetPlatform.android => googleWebClientId.isNotEmpty,
-    _ => false,
-  };
+  /// Off in the web chat: its page loads nothing from other companies.
+  static bool get configured =>
+      !kIsWeb &&
+      switch (defaultTargetPlatform) {
+        TargetPlatform.iOS => googleIosClientId.isNotEmpty,
+        TargetPlatform.android => googleWebClientId.isNotEmpty,
+        _ => false,
+      };
 
   static Future<void>? _ready;
 

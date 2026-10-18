@@ -34,6 +34,7 @@ class NetworkScreen extends StatelessWidget {
     final c = VlColors.of(context);
     final t = Theme.of(context).textTheme;
     final ios = defaultTargetPlatform == TargetPlatform.iOS;
+    if (kIsWeb) return const _WebNetwork();
     return Scaffold(
       body: ValueListenableBuilder<NetworkStatus?>(
         valueListenable: s.network,
@@ -188,6 +189,73 @@ class NetworkScreen extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// The web chat (ADR-040): no Bluetooth, only the internet mailbox.
+class _WebNetwork extends StatelessWidget {
+  const _WebNetwork();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.services;
+    final t = Theme.of(context).textTheme;
+    final c = VlColors.of(context);
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          const SliverAppBar.large(title: Text('Network')),
+          SliverList.list(
+            children: [
+              ValueListenableBuilder<String?>(
+                valueListenable: s.internet.lastError,
+                builder: (context, err, _) => ValueListenableBuilder<DateTime?>(
+                  valueListenable: s.internet.lastOk,
+                  builder: (context, ok, _) => Padding(
+                    padding: EdgeInsets.symmetric(horizontal: Space.gutter(context)),
+                    child: Container(
+                      padding: const EdgeInsets.all(Space.l),
+                      decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(Radii.card)),
+                      child: Row(
+                        children: [
+                          Icon(Icons.cloud_sync_rounded, color: err == null ? c.ok : c.err),
+                          const SizedBox(width: Space.l),
+                          Expanded(
+                            child: Text(
+                              err ??
+                                  (ok == null
+                                      ? 'Connecting to the mailbox…'
+                                      : 'Mailbox reached at ${TimeOfDay.fromDateTime(ok).format(context)}'),
+                              style: t.titleMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SectionHeader('Messages'),
+              Section(
+                rows: [
+                  ListTile(
+                    leading: const Icon(Icons.outbox_outlined),
+                    title: const Text('Waiting to be delivered'),
+                    subtitle: const Text('Your messages without a delivery receipt yet'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Routes.queue(context),
+                  ),
+                ],
+                footer:
+                    'In a browser, messages travel only through the VYRO LINK mailbox, every 10 seconds while '
+                    'this page is open. The mailbox holds sealed envelopes it cannot read and deletes them when they expire. '
+                    'Phones with the app can also pass messages over Bluetooth with no internet at all.',
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

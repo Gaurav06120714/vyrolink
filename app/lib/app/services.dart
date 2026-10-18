@@ -90,7 +90,8 @@ class AppServices implements VlEventsApi {
 
   /// Starts or stops the internet mailbox from the saved setting.
   Future<void> applyInternet() async {
-    final on = startup.hasIdentity && await call((api) => api.setting(InternetSync.enabledKey)) == '1';
+    // The web chat has no Bluetooth, so there the mailbox is always on.
+    final on = startup.hasIdentity && (kIsWeb || await call((api) => api.setting(InternetSync.enabledKey)) == '1');
     on ? internet.start() : internet.stop();
   }
 

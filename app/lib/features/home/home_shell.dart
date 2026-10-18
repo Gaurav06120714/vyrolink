@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vl_host/vl_host.dart';
 
@@ -154,6 +155,7 @@ class NetworkChip extends StatelessWidget {
 
 /// (label, colour, animate?) for the current relay state.
 (String, Color, bool) describeRelay(NetworkStatus? n, VlColors c) {
+  if (kIsWeb) return ('Web chat', c.accent, false);
   if (n == null) return ('Starting', c.text2, false);
   if (!n.relayEnabled) return ('Relay off', c.text2, false);
   return switch (n.radio) {

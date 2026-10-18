@@ -23,4 +23,5 @@ services:
       - key: TRUST_PROXY
         value: "1"
       - key: WEB_ORIGIN
-        sync: false
+        value: https://vyrolink.netlify.app
+

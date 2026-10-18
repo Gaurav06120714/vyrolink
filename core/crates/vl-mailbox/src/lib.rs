@@ -255,14 +255,12 @@ async fn fetch(
     }))
 }
 
-/// The HTTP API. `web_origin` is the web app's origin, allowed by CORS.
-pub fn app(m: Arc<Mailbox>, web_origin: Option<HeaderValue>) -> Router {
-    let mut cors = CorsLayer::new()
+/// The HTTP API. `web_origins` are the web chat's origins, allowed by CORS.
+pub fn app(m: Arc<Mailbox>, web_origins: Vec<HeaderValue>) -> Router {
+    let cors = CorsLayer::new()
         .allow_methods([Method::POST])
-        .allow_headers([header::CONTENT_TYPE]);
-    if let Some(o) = web_origin {
-        cors = cors.allow_origin(o);
-    }
+        .allow_headers([header::CONTENT_TYPE])
+        .allow_origin(web_origins);
     Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/v1/put", post(put))

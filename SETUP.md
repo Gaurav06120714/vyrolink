@@ -385,3 +385,20 @@ There are no measured battery or BLE figures yet; Experiment C is blocked. The r
 | Homebrew download cache | 4.0 GB (removable with `brew cleanup`; contains the Flutter and Android Studio installers) |
 
 Free space went from 130 GiB to about 106 GiB.
+
+## 11. Internet mailbox and web chat (ADR-039, ADR-040)
+
+**Mailbox (Render):**
+- Render → New → Blueprint → this repository. `render.yaml` creates the mailbox (`vyrolink-mailbox`) and its Postgres database. The web chat is served by Netlify at `/chat/`.
+- Local test: `brew services start postgresql`, `createdb vl_mailbox_test`, then:
+  ```bash
+  MAILBOX_TEST_DB="host=/tmp dbname=vl_mailbox_test" cargo test -p vl-mailbox
+  ```
+
+**Web chat:**
+- One-time: `rustup target add wasm32-unknown-unknown`, `rustup component add llvm-tools`, and `cargo install wasm-bindgen-cli --version <the wasm-bindgen version in core/Cargo.lock>`.
+- Build: `tools/build-web.sh https://vyrolink-mailbox.onrender.com --base-href /chat/`, then copy `app/build/web` to `website/chat/`. Remove `*.symbols` files and commit; Netlify deploys it.
+- If Render gives the mailbox a different address, rebuild with it.
+- Then set the mailbox's `WEB_ORIGIN` to the web chat's address.
+
+**Phones:** build with `--dart-define=VL_MAILBOX=<mailbox URL>` if it is not the default.

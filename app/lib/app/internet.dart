@@ -15,6 +15,8 @@ class InternetSync {
 
   final VlHostApi api;
   final http.Client _http;
+
+  /// Called when mail arrived or my messages changed state (uploaded).
   final VoidCallback? onNewMail;
 
   static const enabledKey = 'internet.enabled';
@@ -56,15 +58,16 @@ class InternetSync {
     _busy = true;
     try {
       // Up to a few batches per round, so a full outbox drains quickly.
+      var fresh = false;
       for (var i = 0; i < 4; i++) {
         final out = await api.internetOutbox();
         if (out.isEmpty) break;
         await _post('/v1/put', {'envelopes': out.map(base64Encode).toList()});
         await api.internetUploaded(out);
+        fresh = true;
         if (out.length < 64) break;
       }
       final tags = await api.internetTags();
-      var fresh = false;
       if (tags.isNotEmpty) {
         final got = await _post('/v1/get', {'tags': tags.map(base64Encode).toList()});
         for (final e in (got['envelopes'] as List).cast<String>()) {

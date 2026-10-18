@@ -1,13 +1,38 @@
-# Netlify serves the static website in website/. There is no build step.
+# Netlify serves the static website in website/, and the web chat (ADR-040,
+# prebuilt by tools/build-web.sh) in website/chat/. There is no build step.
 [build]
   publish = "website"
   command = ""
 
-# The page loads nothing from other sites; the policy enforces that.
+# The info page loads nothing from other sites; the policy enforces that.
 [[headers]]
-  for = "/*"
+  for = "/"
   [headers.values]
     Content-Security-Policy = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Content-Security-Policy = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# The web chat sets its own Content-Security-Policy in chat/index.html (only
+# its own scripts; connections to the mailbox). It needs the camera to scan
+# pairing codes and, when you share it, your location.
+[[headers]]
+  for = "/chat/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(self), geolocation=(self), microphone=(), payment=()"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/chat/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"

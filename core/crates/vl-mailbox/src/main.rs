@@ -1,5 +1,5 @@
 //! Runs the mailbox. Environment: `DATABASE_URL` (Postgres, internal URL, no
-//! TLS), `PORT` (default 8080), `WEB_ORIGIN` (the web app, for CORS), and
+//! TLS), `PORT` (default 8080), `WEB_ORIGIN` (web chat origins, comma-separated, for CORS), and
 //! `TRUST_PROXY=1` behind Render's proxy.
 
 use std::net::SocketAddr;
@@ -27,9 +27,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::time::sleep(Duration::from_secs(300)).await;
         }
     });
-    let origin = std::env::var("WEB_ORIGIN")
-        .ok()
-        .and_then(|o| o.parse().ok());
+    // Comma-separated, e.g. "https://chat.example.com,https://example.com".
+    let origins = std::env::var("WEB_ORIGIN")
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|o| o.trim().parse().ok())
+        .collect();
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
@@ -38,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("mailbox listening on port {port}");
     axum::serve(
         listener,
-        app(m, origin).into_make_service_with_connect_info::<SocketAddr>(),
+        app(m, origins).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(async {
         let _ = tokio::signal::ctrl_c().await;
