@@ -54,7 +54,7 @@ Prepared 18 October 2026. Play's rules change; re-check anything marked *verify*
 - **Category:** Communication. **Tags:** messaging, privacy, offline.
 - **Contact email:** hello@vyrolink.me. **Website:** your site. **Privacy policy URL:** `https://<your-site>/#privacy`
 - **Screenshots:** at least 2 phone screenshots. Release builds block screenshots when that setting is on, so turn off Settings → Privacy → Block screenshots before taking them.
-- **Graphics:** the 512 × 512 icon and a 1024 × 500 feature graphic.
+- **Graphics:** ready in `brand/`: `play-icon-512.png` (app icon) and `play-feature-graphic-1024x500.png` (feature graphic). They are drawn from exact geometry by `brand/make_brand.py`, which also writes the Android, iOS and web icons.
 
 ## App content forms
 
